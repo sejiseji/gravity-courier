@@ -35,6 +35,11 @@ class WebPublishTests(unittest.TestCase):
         self.assertIn("const GAME_WIDTH = 393;", patched)
         self.assertIn("const GAME_HEIGHT = 852;", patched)
         self.assertIn("fitCanvasToVisibleViewport", patched)
+        self.assertIn("gc-start-overlay", patched)
+        self.assertIn("TAP TO START", patched)
+        self.assertIn("resolveInput", patched)
+        self.assertIn("document.documentElement.appendChild(startOverlay)", patched)
+        self.assertIn('document.addEventListener("pointerdown", tryStart, true)', patched)
 
     def test_patch_is_idempotent(self) -> None:
         html = (
@@ -57,6 +62,11 @@ class WebPublishTests(unittest.TestCase):
         self.assertIn("window.visualViewport", html)
         self.assertIn('name: "gravity-courier-public.pyxapp"', html)
         self.assertIn('gamepad: "disabled"', html)
+        self.assertIn("gc-start-overlay", html)
+        self.assertIn("TAP TO START", html)
+        self.assertIn("resolveInput", html)
+        self.assertIn("document.documentElement.appendChild(startOverlay)", html)
+        self.assertIn('document.addEventListener("pointerdown", tryStart, true)', html)
         forbidden_fragments = (
             "/Users/",
             "toytoytoy330",

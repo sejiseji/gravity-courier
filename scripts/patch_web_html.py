@@ -55,12 +55,89 @@ MOBILE_VIEWPORT_PATCH = f"""{PATCH_MARKER}
     image-rendering: crisp-edges;
     touch-action: none;
   }}
+
+  div#pyxel-screen {{
+    background: #000 !important;
+    overflow: hidden !important;
+  }}
+
+  img#pyxel-logo,
+  img#pyxel-prompt {{
+    z-index: 4 !important;
+  }}
+
+  #gc-start-overlay {{
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: #e9c35b;
+    background: #202224;
+    font-family: monospace;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-align: center;
+    touch-action: manipulation;
+    user-select: none;
+    pointer-events: auto !important;
+  }}
+
+  #gc-start-overlay .gc-start-subtitle {{
+    color: #eee;
+    font-size: 14px;
+    font-weight: 400;
+  }}
+
+  #gc-start-overlay.gc-hidden {{
+    display: none;
+  }}
 </style>
 <script>
 (() => {{
   const GAME_WIDTH = {GAME_WIDTH};
   const GAME_HEIGHT = {GAME_HEIGHT};
   let pendingFrame = 0;
+  let startOverlay = null;
+
+  const ensureStartOverlay = () => {{
+    if (startOverlay || !document.documentElement) {{
+      return startOverlay;
+    }}
+    startOverlay = document.createElement("div");
+    startOverlay.id = "gc-start-overlay";
+    startOverlay.innerHTML = '<div>TAP TO START</div><div class="gc-start-subtitle">Gravity Courier</div>';
+    document.documentElement.appendChild(startOverlay);
+    const tryStart = () => {{
+      const resolver = window.pyxelContext && window.pyxelContext.resolveInput;
+      if (!resolver) {{
+        return;
+      }}
+      resolver();
+      startOverlay.classList.add("gc-hidden");
+    }};
+    startOverlay.addEventListener("pointerdown", tryStart);
+    startOverlay.addEventListener("touchstart", tryStart, {{ passive: true }});
+    startOverlay.addEventListener("click", tryStart);
+    document.addEventListener("pointerdown", tryStart, true);
+    document.addEventListener("touchstart", tryStart, {{ capture: true, passive: true }});
+    document.addEventListener("click", tryStart, true);
+    return startOverlay;
+  }};
+
+  const updateStartOverlay = () => {{
+    const overlay = ensureStartOverlay();
+    if (!overlay) {{
+      return;
+    }}
+    const waitingForInput = Boolean(window.pyxelContext && window.pyxelContext.resolveInput);
+    const initialized = Boolean(window.pyxelContext && window.pyxelContext.initialized);
+    overlay.classList.toggle("gc-hidden", initialized || !waitingForInput);
+  }};
 
   const safeAreaProbe = () => {{
     let probe = document.getElementById("gc-safe-area-probe");
@@ -122,6 +199,12 @@ MOBILE_VIEWPORT_PATCH = f"""{PATCH_MARKER}
     canvas.style.maxWidth = `${{availableWidth}}px`;
     canvas.style.maxHeight = `${{availableHeight}}px`;
     canvas.style.margin = "0";
+    const pyxelScreen = document.getElementById("pyxel-screen");
+    if (pyxelScreen) {{
+      pyxelScreen.style.width = `${{viewport.width}}px`;
+      pyxelScreen.style.height = `${{viewport.height}}px`;
+    }}
+    updateStartOverlay();
   }};
 
   const requestFit = () => {{
