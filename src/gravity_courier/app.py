@@ -249,6 +249,7 @@ class TouchControlState:
     active: bool = False
     last_x: float = 0.0
     last_y: float = 0.0
+    accumulated_horizontal: float = 0.0
     accumulated_vertical: float = 0.0
 
 
@@ -1490,6 +1491,11 @@ class GravityCourierApp:
         dy = y - self.touch_controls.last_y
         self.touch_controls.last_x = x
         self.touch_controls.last_y = y
+        self.touch_controls.accumulated_horizontal = clamp(
+            self.touch_controls.accumulated_horizontal + dx,
+            -TOUCH_DRAG_FULL_RESPONSE_PIXELS,
+            TOUCH_DRAG_FULL_RESPONSE_PIXELS,
+        )
         self.touch_controls.accumulated_vertical += dy
         if self.touch_controls.accumulated_vertical <= -TOUCH_VERTICAL_SWIPE_THRESHOLD:
             self.touch_thrust_pulse_frames = TOUCH_THRUST_PULSE_FRAMES
@@ -1500,7 +1506,11 @@ class GravityCourierApp:
 
         speed_ratio = clamp(self.rocket.velocity.length() / TOUCH_HIGH_SPEED_REFERENCE, 0.0, 1.0)
         assist = 1.0 + speed_ratio * TOUCH_HIGH_SPEED_TURN_ASSIST
-        rotate = clamp(dx / TOUCH_DRAG_FULL_RESPONSE_PIXELS * assist, -1.0, 1.0)
+        rotate = clamp(
+            self.touch_controls.accumulated_horizontal / TOUCH_DRAG_FULL_RESPONSE_PIXELS * assist,
+            -1.0,
+            1.0,
+        )
         pulse_intent = self._active_touch_pulse_intent()
         return ControlIntent(
             rotate_axis=rotate,

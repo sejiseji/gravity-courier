@@ -33,6 +33,7 @@ from gravity_courier.constants import (
     HEIGHT,
     ROCKET_TURN_RATE_MAX,
     TOUCH_BRAKE_PULSE_STRENGTH,
+    TOUCH_DRAG_FULL_RESPONSE_PIXELS,
     TOUCH_THRUST_PULSE_STRENGTH,
     WIDTH,
 )
@@ -215,6 +216,36 @@ class RelativeControlTest(unittest.TestCase):
 
         self.assertGreater(intent.rotate_axis, 0.0)
         self.assertEqual(app.touch_controls.last_x, 126.0)
+
+    def test_touch_drag_holds_horizontal_steer_after_drag_stops(self) -> None:
+        app = GravityCourierApp()
+        app.touch_controls = TouchControlState(active=True, last_x=100.0, last_y=300.0)
+
+        first = app._touch_control_intent(FakePyxelTouch(118, 300))
+        held = app._touch_control_intent(FakePyxelTouch(118, 300))
+
+        self.assertGreater(first.rotate_axis, 0.0)
+        self.assertAlmostEqual(held.rotate_axis, first.rotate_axis)
+
+    def test_touch_drag_can_reach_full_steer_with_accumulated_offset(self) -> None:
+        app = GravityCourierApp()
+        app.touch_controls = TouchControlState(active=True, last_x=100.0, last_y=300.0)
+
+        app._touch_control_intent(FakePyxelTouch(122, 300))
+        intent = app._touch_control_intent(
+            FakePyxelTouch(int(100 + TOUCH_DRAG_FULL_RESPONSE_PIXELS + 4), 300)
+        )
+
+        self.assertEqual(intent.rotate_axis, 1.0)
+
+    def test_touch_drag_recenters_when_dragged_back(self) -> None:
+        app = GravityCourierApp()
+        app.touch_controls = TouchControlState(active=True, last_x=100.0, last_y=300.0)
+
+        app._touch_control_intent(FakePyxelTouch(124, 300))
+        intent = app._touch_control_intent(FakePyxelTouch(100, 300))
+
+        self.assertEqual(intent.rotate_axis, 0.0)
 
     def test_touch_high_speed_turn_assist_raises_drag_response(self) -> None:
         app = GravityCourierApp()
