@@ -10,7 +10,7 @@ The first real Hero sprite and five initial resident idle sprites are now in the
 Reserved resource:
 
 ```text
-assets/gravity_courier.pyxres
+prototypes/gravity_courier/assets/gravity_courier.pyxres
 ```
 
 Primitive fallback remains mandatory.
@@ -26,8 +26,9 @@ Current completed assets:
 | Forest idle | 0 | 0 | 128 | `32x32` | 14 |
 | Rock idle | 0 | 0 | 160 | `32x32` | 14 |
 
-Hero cheer/result temporarily reuse the idle cell. Resident cheer stages currently reuse each
-resident idle cell until dedicated cheer-stage cells are authored.
+Hero cheer/result temporarily fall back to the idle-style primitive until dedicated cells are authored.
+Resident cheer stages are not marked ready yet; they fall back to primitive portraits until dedicated
+cheer-stage cells are authored.
 
 ## Resident Sprite Standard
 
@@ -123,9 +124,32 @@ Hero row:
 | Column | Hero state |
 | --- | --- |
 | 0 | idle |
-| 1 | cheer, reuses idle until authored |
-| 2 | result, reuses idle until authored |
+| 1 | cheer, fallback until authored |
+| 2 | result, fallback until authored |
 | 3 | reserved |
+
+## Current Readiness Matrix
+
+`load_resident_resources()` loads the `.pyxres` once, but individual sprites are activated through
+per-state readiness so unfinished cells do not silently appear as finished art.
+
+Hero:
+
+| State | Status |
+| --- | --- |
+| idle | ready |
+| cheer | fallback until authored |
+| result | fallback until authored |
+
+Residents:
+
+| Type | idle | cheer1 | cheer2 | cheer3 |
+| --- | --- | --- | --- | --- |
+| Wind | ready | fallback | fallback | fallback |
+| Iron | ready | fallback | fallback | fallback |
+| Water | ready | fallback | fallback | fallback |
+| Forest | ready | fallback | fallback | fallback |
+| Rock | ready | fallback | fallback | fallback |
 
 ## Rocket Sprite Plan
 

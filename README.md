@@ -4,13 +4,13 @@ Gravity Courier is a portrait Pyxel prototype for a 2D gravity-assist rocket gam
 
 ## Status
 
-Playable prototype with orbit focus presentation, Journey Progress, Normal/Hard courses, final goal, result screen, and result test helper.
+GRC010A title screen and mode selection on top of mobile controls, audio foundation, procedural planet visuals, Journey Progress, final goal, result screen, result test helper, orbit focus presentation, and off-course recovery helper.
 
-The prototype now has velocity-relative steering, forward boost, orbit assist around planets, restrained orbit focus zoom with concentration lines, Normal/Hard finite courses, dotted trajectory preview, HP/shield collision damage, restart, larger HUD text, demo mode with a top-right toggle button, formal score, per-planet lap count, on-planet lap labels, HUD score, lap multipliers, simple 3-stage cheer text, planet types, 2-lap planet rewards, a shared resident cut-in panel, deterministic interplanet objects, delayed supply ships, supply cargo, planet-type crew growth, course gaps, crossing meteor swarms, Journey Progress, an Earth-like final goal, a result state, final score, rank, density-based crew celebration, a developer-only result test helper, documented mobile controls, and documented post-GRC009 polish roadmap.
+The prototype now has a title screen with START, Normal/Hard selection, DEMO entry, SOUND toggle, and layered title BGM; velocity-relative steering, forward boost, orbit assist around planets, restrained orbit focus zoom with concentration lines, screen-edge off-course guidance, richer procedural planet visuals, Normal/Hard finite courses, dotted trajectory preview, HP/shield collision damage, restart, larger HUD text, demo mode with a top-right toggle button, formal score, per-planet lap count, on-planet lap labels, HUD score, lap multipliers, simple 3-stage cheer text, planet types, 2-lap planet rewards, a shared resident cut-in panel, deterministic interplanet objects, delayed supply ships, supply cargo, planet-type crew growth, course gaps, crossing meteor swarms, Journey Progress, an Earth-like final goal, a result state, final score, rank, density-based crew celebration, a developer-only result test helper, mobile controls, lightweight synth audio, and documented post-GRC009 polish roadmap.
 
 GRC005A separates lap completion from Transfer Boost. Laps now complete from signed angular orbit progress while the rocket remains inside a planet gravity well. Each completed lap awards score, updates the planet lap label, triggers cheer/cut-in feedback, and can trigger the lap 2 planet reward. Transfer Boost is now an exit event: after at least one completed lap in the current visit, `TRANSFER READY` appears; leaving the gravity well triggers `TRANSFER BOOST!` once for that visit.
 
-GRC006 adds floating asteroids, crossing rockets with warning timing, and normal supply items. Normal supply items add score and fuel only; they do not add crew. GRC007 adds lap 3 supply ship reservations, supply cargo that adds score/fuel/crew, missed-cargo rules, and a compact in-run crew UI. GRC008 replaces the fixed type sequence with seeded shuffle-bag course generation, creates course gap metadata, marks future supply gaps, and adds warning-based crossing meteor swarms. GRC009 adds Journey Progress, an Earth-like final goal outside normal planet logic, result scoring, a separate result state, and crew celebration rendering. GRC009F adds Normal/Hard course modes. GRC009A adds a DEBUG/DEMO-only `GOAL TEST` helper for result-density testing. GRC009B adds restrained orbit focus presentation without changing orbit physics. Title screen, procedural endless generation, sound, and iOS wrapper work remain out of scope.
+GRC006 adds floating asteroids, crossing rockets with warning timing, and normal supply items. Normal supply items add score and fuel only; they do not add crew. GRC007 adds lap 3 supply ship reservations, supply cargo that adds score/fuel/crew, missed-cargo rules, and a compact in-run crew UI. GRC008 replaces the fixed type sequence with seeded shuffle-bag course generation, creates course gap metadata, marks future supply gaps, and adds warning-based crossing meteor swarms. GRC009 adds Journey Progress, an Earth-like final goal outside normal planet logic, result scoring, a separate result state, and crew celebration rendering. GRC009F adds Normal/Hard course modes. GRC009A adds a DEBUG/DEMO-only `GOAL TEST` helper for result-density testing. GRC009B adds restrained orbit focus presentation without changing orbit physics. GRC009C adds safe screen-edge guidance back to the next expected course target without changing physics. GRC009D adds layered procedural planet rendering with type-specific surfaces, atmospheres, and sparse particles without changing gameplay physics. GRC010 adds mobile touch controls. GRC009G adds lightweight synth audio, including layered title BGM, cruise BGM, result BGM, and an orbit-entry cue. GRC010A adds title flow and mode selection. Final resident art, procedural endless generation, external assets, and iOS wrapper work remain out of scope.
 
 ## Fixed Screen Profile
 
@@ -23,7 +23,7 @@ All gameplay layout, camera behavior, HUD, trajectory preview, and planet placem
 ## Run
 
 ```bash
-python3 main.py
+python3 prototypes/gravity_courier/main.py
 ```
 
 If the system Python blocks package installs with PEP 668, use the project virtual environment:
@@ -31,7 +31,7 @@ If the system Python blocks package installs with PEP 668, use the project virtu
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install pyxel
-.venv/bin/python main.py
+.venv/bin/python prototypes/gravity_courier/main.py
 ```
 
 Pyxel is required for the playable window.
@@ -40,6 +40,10 @@ Pyxel is required for the playable window.
 
 Current desktop prototype controls:
 
+- Title START / Z / Enter: start selected mode
+- Title MODE / Left / Right: switch Normal/Hard mode
+- Title DEMO / M: start demo run
+- Title SOUND / S: toggle sound
 - Left / Right: steer left/right relative to the current travel direction
 - Up: boost along the current travel direction and consume fuel
 - Down: brake by damping velocity
@@ -49,14 +53,14 @@ Current desktop prototype controls:
 - D: toggle debug HUD
 - Escape: quit
 
-Planned mobile controls are documented in `docs/product/MOBILE_CONTROL_SPEC.md`. The mobile direction is horizontal drag for high-sensitivity rotation, upward swipe for gentle forward thrust, downward swipe for gentle braking, and always-on trajectory preview with no gameplay preview toggle.
+Mobile controls are documented in `docs/product/MOBILE_CONTROL_SPEC.md`. The current mobile direction is horizontal drag for high-sensitivity rotation, upward swipe for gentle forward thrust, downward swipe for gentle braking, and always-on trajectory preview with no gameplay preview toggle.
 
 ## Validate
 
 ```bash
-python3 -m compileall main.py src tests scripts
-python3 scripts/check_all.py
-python3 -m unittest discover tests
+python3 -m compileall prototypes/gravity_courier
+python3 prototypes/gravity_courier/scripts/check_all.py
+python3 -m unittest discover prototypes/gravity_courier/tests
 git diff --check
 ```
 
@@ -64,16 +68,15 @@ git diff --check
 
 ## Current Limitations
 
-- No touch controls yet.
 - No procedural endless universe yet; the current course is finite and seeded.
-- No sound, BGM, or iOS wrapper.
-- No title-screen mode selection yet; `N` toggles Normal/Hard during the prototype.
-- No title screen yet.
+- No iOS wrapper yet.
+- No external audio assets; current sound and BGM are lightweight Pyxel synth patterns.
+- `N` remains as a temporary in-run Normal/Hard reset shortcut for development.
 - Trajectory preview treats planet positions as static for readability.
 - Physics favors readable arcade swing-bys over strict orbital realism.
 - Orbit assist is intentionally game-like: it helps the rocket circle planets instead of instantly leaving every gravity well.
 - Transfer Boost is separate from lap scoring. It becomes ready after at least one completed lap in the current planet visit, then triggers once when the rocket exits that planet's gravity well.
-- Course generation is deterministic and finite: Normal has 20 planets and Hard has 35 planets.
+- Course generation is deterministic and finite: Normal has 20 planets, Hard has 35 planets.
 - Supply ship delay still counts Transfer Boost exits, but ready reservations now queue in SUPPLY ZONE lanes by planet type until collected.
 
 ## Tuning Constants
@@ -100,11 +103,13 @@ Core tuning lives in `src/gravity_courier/constants.py`:
 - course constants: `COURSE_SEED`, `MAX_PLANET_APPEARANCES_PER_TYPE`, `COURSE_START_Y`, `PLANET_BASE_SPACING_Y`, `PLANET_SPACING_Y_GROWTH`, `PLANET_X_MIN`, `PLANET_X_MAX`
 - meteor swarm constants: `METEOR_SWARM_METEOR_COUNT`, `METEOR_SWARM_RADIUS`, `METEOR_SWARM_SPEED`, `METEOR_SWARM_DAMAGE`, `METEOR_SWARM_WARNING_FRAMES`, `METEOR_SWARM_GAP_START_INDEX`, `METEOR_SWARM_EVERY_N_GAPS`
 - supply ship/crew constants: `SUPPLY_LAP_INTERVAL`, `SUPPLY_SHIP_DELAY_GAPS_MIN`, `SUPPLY_SHIP_DELAY_GAPS_MAX`, `CREW_JOIN_SEQUENCE`, `MAX_SUPPLY_TIERS_PER_TYPE`, `MAX_SUPPLY_SHIP_CHANCES_PER_TYPE`, `SUPPLY_SHIP_CARGO_SCORE`, `SUPPLY_SHIP_CARGO_FUEL_RATIO`, `SUPPLY_SHIP_SPEED`, `SUPPLY_SHIP_RADIUS`, `SUPPLY_CARGO_RADIUS`, `SUPPLY_SHIP_WARNING_FRAMES`
+- off-course helper constants: `OFF_COURSE_DISTANCE_THRESHOLD`, `OFF_COURSE_STALL_FRAMES`, `OFF_COURSE_MARGIN`, `OFF_COURSE_SAFE_TOP`, `OFF_COURSE_SAFE_BOTTOM`, `OFF_COURSE_AWAY_SPEED_THRESHOLD`
 - final goal/result constants: `FINAL_GOAL_RADIUS`, `FINAL_GOAL_ARRIVAL_RADIUS`, `FINAL_GOAL_SPACING_Y`, `CREW_SCORE_VALUE`, `RESULT_RANK_THRESHOLDS`
 - cut-in/resource constants: `ASSETS_DIR`, `RESIDENT_RESOURCE_PATH`, `RESIDENT_SPRITE_SIZE`, `CUTIN_RESIDENT_SCALE`, `CUTIN_RESIDENT_DRAW_SIZE`, `CUTIN_PANEL_WIDTH`, `CUTIN_PANEL_HEIGHT`, `CUTIN_SLIDE_IN_FRAMES`, `CUTIN_SLIDE_OUT_FRAMES`, `CREW_RESIDENT_SCALE`, `CREW_HIGHLIGHT_SCALE`, `CUTIN_DURATION_FRAMES`
 - `ROCKET_FUEL_COST`
 - `TRAJECTORY_STEPS`
 - `TRAJECTORY_DOT_INTERVAL`
+- audio constants and ids are centralized in `src/gravity_courier/audio.py`
 - `PLANET_COUNT`
 - `PLANET_VERTICAL_SPACING`
 - demo steering constants: `DEMO_TARGET_UPWARD_SPEED`, `DEMO_MAX_SPEED`, `DEMO_STEER_GAIN`
@@ -113,11 +118,7 @@ Core tuning lives in `src/gravity_courier/constants.py`:
 
 ## Known Next Improvements
 
-- GRC009C: add off-course recovery helper.
-- GRC009D: enrich procedural planet visuals.
-- GRC009E: integrate developer-authored resident and rocket sprite assets when ready.
-- GRC010: prepare mobile/touch readiness.
-- GRC010A: add title screen and mode selection.
+- Continue enabling new resident/Hero sprite cells as they are authored.
 - GRC011: polish toward a release candidate prototype.
 
 ## Planned Gameplay Roadmap
@@ -157,10 +158,10 @@ Current cut-in implementation:
 - Completed laps start a shared resident cut-in panel.
 - Resident registry maps planet types to original resident IDs and names.
 - Resident sprites are planned as `32x32` Pyxel Editor cells.
-- Reserved resource path: `assets/gravity_courier.pyxres`
+- Reserved resource path: `prototypes/gravity_courier/assets/gravity_courier.pyxres`
 - Hero sprite is available at image bank 0, `(u=0, v=0)`, `32x32`, using palette color `14` as transparent.
 - Five resident idle sprites are available below Hero at `v=32..160`, also using palette color `14` as transparent.
-- Loading the `.pyxres` enables Hero plus the five resident idle sprites; resident cheer stages reuse idle until dedicated expressions are authored.
+- Loading the `.pyxres` enables Hero idle plus the five resident idle sprites; resident cheer stages fall back until dedicated expressions are authored.
 - If the `.pyxres` file is missing or cannot load, primitive fallback portraits and Hero markers are used.
 - Cut-in stage 3 is reused for lap 3+.
 - Cut-ins slide in near the middle of the screen from the side opposite the assisting planet, preserving lower screen space for future crew UI.
@@ -224,13 +225,13 @@ Planned mobile control direction:
 
 Post-GRC009 roadmap direction:
 
-- Normal mode is the standard route: 20 planets, 4 appearances per normal planet type.
-- Hard mode preserves the long route: 35 planets, 7 appearances per normal planet type.
+- Normal mode should become the standard route: 20 planets, 4 appearances per normal planet type.
+- Hard mode should preserve the current long route: 35 planets, 7 appearances per normal planet type.
 - Off-course guidance should point toward the next expected course planet, not just the nearest planet.
 - Orbit focus presentation uses restrained zoom, deterministic concentration lines, and smooth release on Transfer Boost.
 - Planet visuals should become richer through procedural type-specific rendering, without requiring image assets.
 - Resident/Hero sprites use a `32x32` atlas with Hero on row 0 and resident rows starting at `v=32`.
-- Rocket visuals should later use a 3-state `32x32` sprite plan: idle, thrust, damage.
+- Resident/Hero readiness is tracked per state so incomplete atlas cells can keep primitive fallbacks.
 - The developer-only `GOAL TEST` helper speeds up result-screen crew-density verification.
 - A title screen should eventually provide START, Normal/Hard selection, DEMO, and concise mobile control guidance.
 
@@ -251,3 +252,7 @@ Roadmap/spec docs:
 - `docs/product/RESULT_TEST_HELPER_SPEC.md`
 - `docs/product/TITLE_SCREEN_SPEC.md`
 - `docs/product/POST_GRC009_ROADMAP.md`
+
+## Protected Files
+
+Existing Firework Observer files, including the root `main.py` and existing gameplay modules, must not be modified by Gravity Courier tasks.

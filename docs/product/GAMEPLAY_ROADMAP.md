@@ -2,6 +2,8 @@
 
 Gravity Courier should grow from a readable swing-by prototype into a score-driven gravity-assist arcade game. The fixed product target remains `iphone16_large`, `393x852`, portrait-first.
 
+Keep new work inside `prototypes/gravity_courier/`. Do not modify root `main.py`, Firework Observer gameplay files, HTML files, or external assets.
+
 ## Product Direction
 
 - The player earns score by successfully performing swing-bys.
@@ -86,7 +88,7 @@ Implement:
 - Shared cut-in component.
 - Character registry.
 - Resident registry with `32x32` sprite metadata.
-- Resource-backed cut-in portraits using `assets/gravity_courier.pyxres` when available.
+- Resource-backed cut-in portraits using `prototypes/gravity_courier/assets/gravity_courier.pyxres` when available.
 - Primitive fallback portraits when the resource file is not available.
 - Planet-specific resident IDs.
 - Cheer stage 1/2/3 visual effects.
@@ -307,21 +309,23 @@ Implement:
 - Lightweight atmospheric animation.
 - Collision/render separation.
 
-### GRC009E: Integrate resident and rocket sprite assets
+### GRC009E: Complete resident and Hero sprite integration
 
 Goal:
-- Move from primitive placeholders toward resource-backed sprites.
+- Track authored resident and Hero sprites precisely while retaining primitive fallback.
 
 Implement:
 - `.pyxres` resource integration.
 - 23-sprite minimum resident/Hero atlas.
-- 3-state rocket minimum.
+- Per-Hero-state readiness.
+- Per-resident-stage readiness.
 - Primitive fallback retained.
 - Atlas documentation and validation.
 
 Important:
 - This task may wait until Pyxel Editor sprites are ready.
 - Do not create fake `.pyxres` assets.
+- Rocket sprite work is handled separately and is not part of this remaining scope.
 
 ### GRC010: Mobile/touch readiness pass
 
@@ -348,18 +352,34 @@ Do not implement:
 - Large instantaneous swipe velocity impulses.
 - Removal of keyboard controls.
 
+### GRC009G: Add gameplay audio manager and stage sounds
+
+Goal:
+- Add a lightweight audio foundation before title-screen SOUND controls.
+
+Implemented:
+- Fallback-safe `AudioManager`.
+- Layered title BGM with low accompaniment and high music-box harmony.
+- Thin looping cruise BGM.
+- Gentle looping result BGM.
+- Lap 1, lap 2, and lap 3+ stage sounds.
+- Transfer Boost, supply, damage, crash, and result sounds.
+- Temporary `S` key sound toggle.
+
 ### GRC010A: Implement title screen and mode selection
 
 Goal:
 - Add a simple start flow before gameplay.
 
-Implement:
+Implemented:
 - Title state.
-- START.
-- Normal/Hard selection.
-- DEMO.
+- START button and Z/Enter start.
+- Normal/Hard selection button and Left/Right selection.
+- DEMO title entry using the existing demo mode.
+- SOUND title control sharing the same sound-enabled state as `S`.
 - Concise control guidance.
-- Touch and keyboard navigation.
+- Touch/click and keyboard navigation.
+- Title screen plays layered title audio; START/DEMO switches to gameplay BGM.
 
 Dependency:
 - If course modes are not implemented yet, GRC009F should precede this task.

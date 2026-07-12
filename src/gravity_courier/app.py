@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 import math
 from typing import Any
 
+from .audio import AudioManager
 from .camera import Camera
 from .constants import (
     ASSIST_FUEL_REWARD,
@@ -92,6 +93,12 @@ from .constants import (
     ORBIT_TRACK_GUIDE_MIN_STRENGTH,
     ORBIT_TRACK_GUIDE_RADIAL_CORRECTION,
     ORBIT_TRACK_GUIDE_STRENGTH,
+    OFF_COURSE_AWAY_SPEED_THRESHOLD,
+    OFF_COURSE_DISTANCE_THRESHOLD,
+    OFF_COURSE_MARGIN,
+    OFF_COURSE_SAFE_BOTTOM,
+    OFF_COURSE_SAFE_TOP,
+    OFF_COURSE_STALL_FRAMES,
     LAP_COMPLETION_RADIANS,
     ORBIT_TARGET_RADIUS_RATIO,
     PROFILE_NAME,
@@ -114,7 +121,16 @@ from .constants import (
     RESIDENT_RESOURCE_PATH,
     STAR_COUNT,
     SUPPLY_PICKUP_RADIUS_BONUS,
+    TOUCH_BRAKE_PULSE_FRAMES,
+    TOUCH_BRAKE_PULSE_STRENGTH,
+    TOUCH_DRAG_FULL_RESPONSE_PIXELS,
+    TOUCH_HIGH_SPEED_REFERENCE,
+    TOUCH_HIGH_SPEED_TURN_ASSIST,
+    TOUCH_THRUST_PULSE_FRAMES,
+    TOUCH_THRUST_PULSE_STRENGTH,
+    TOUCH_VERTICAL_SWIPE_THRESHOLD,
     TRAJECTORY_DOT_INTERVAL,
+    TRAJECTORY_PREVIEW_ALWAYS_ON,
     TRAJECTORY_STEPS,
     WATER_REWARD_SCORE_MULTIPLIER,
     WATER_REWARD_SCORE_USES,
@@ -124,6 +140,7 @@ from .constants import (
 )
 from .course import (
     COURSE_MODE_HARD,
+    COURSE_MODES,
     CourseGap,
     DEFAULT_COURSE_MODE_KEY,
     future_gap_id_for_supply,
@@ -170,8 +187,8 @@ from .planet_types import (
     PLANET_TYPE_WIND,
     planet_type_spec,
 )
-from .residents import resident_by_id, resident_for_planet_type
-from .resources import HERO_SPRITE, ROCKET_SPRITE, ResidentResourceState, load_resident_resources
+from .residents import STAGE_IDLE, resident_by_id, resident_for_planet_type
+from .resources import HERO_SPRITE, HERO_STATE_IDLE, ROCKET_SPRITE, ResidentResourceState, load_resident_resources
 from .result import (
     RESULT_DENSITY_CROWD,
     RESULT_DENSITY_DENSE,
@@ -208,16 +225,65 @@ from .trajectory import simulate_preview
 
 
 START_POSITION = Vec2(WIDTH * 0.5, HEIGHT * 0.82)
+STATE_TITLE = "title"
 STATE_PLAYING = "playing"
 STATE_CRASHED = "crashed"
 STATE_RESULT = "result"
 RESULT_TEST_CREW_PRESETS = (12, 50, 51, 200, 201, 635)
+GOAL_TEST_APPROACH_DISTANCE = 120.0
+GOAL_TEST_APPROACH_SPEED = -1.25
+GOAL_TEST_FLICK_THRESHOLD = 24.0
+
+
+@dataclass(frozen=True)
+class ControlIntent:
+    rotate_axis: float = 0.0
+    thrust_axis: float = 0.0
+    brake_axis: float = 0.0
+    thrust_pulse: float = 0.0
+    brake_pulse: float = 0.0
+
+
+@dataclass
+class TouchControlState:
+    active: bool = False
+    last_x: float = 0.0
+    last_y: float = 0.0
+    accumulated_vertical: float = 0.0
+
+
+PLANET_RENDERERS = {
+    PLANET_TYPE_WIND: "_draw_wind_planet",
+    PLANET_TYPE_IRON: "_draw_iron_planet",
+    PLANET_TYPE_WATER: "_draw_water_planet",
+    PLANET_TYPE_FOREST: "_draw_forest_planet",
+    PLANET_TYPE_ROCK: "_draw_rock_planet",
+    PLANET_TYPE_BLACK_HOLE: "_draw_black_hole_planet",
+}
 GOAL_TEST_BUTTON_WIDTH = 106
 GOAL_TEST_BUTTON_HEIGHT = 32
+TITLE_BUTTON_WIDTH = 236
+TITLE_BUTTON_HEIGHT = 42
+TITLE_BUTTON_GAP = 16
+TITLE_START_Y = 294
+TITLE_MODE_Y = TITLE_START_Y + TITLE_BUTTON_HEIGHT + TITLE_BUTTON_GAP
+TITLE_DEMO_Y = TITLE_MODE_Y + TITLE_BUTTON_HEIGHT + TITLE_BUTTON_GAP
+TITLE_SOUND_Y = TITLE_DEMO_Y + TITLE_BUTTON_HEIGHT + TITLE_BUTTON_GAP
+TITLE_SHOOTING_STAR_INTERVAL_FRAMES = 600
+TITLE_SHOOTING_STAR_DURATION_FRAMES = 44
+TITLE_SHOOTING_STAR_FIRST_FRAME = 120
+TITLE_MENU_START = 0
+TITLE_MENU_MODE = 1
+TITLE_MENU_DEMO = 2
+TITLE_MENU_SOUND = 3
+TITLE_MENU_COUNT = 4
 RESULT_RETRY_BUTTON_WIDTH = 112
 RESULT_RETRY_HARD_BUTTON_WIDTH = 156
-RESULT_RETRY_BUTTON_HEIGHT = 34
+RESULT_RETRY_BUTTON_HEIGHT = 28
 RESULT_RETRY_BUTTON_GAP = 10
+RESULT_TITLE_BUTTON_WIDTH = 250
+RESULT_TITLE_BUTTON_HEIGHT = 28
+RESULT_TITLE_BUTTON_Y = HEIGHT - 74
 RESULT_WELCOME_MESSAGE = "WELCOME TO EARTH, FRIENDS!"
 
 
@@ -256,10 +322,33 @@ def demo_button_rect() -> tuple[int, int, int, int]:
     return (DEMO_BUTTON_X, DEMO_BUTTON_Y, DEMO_BUTTON_WIDTH, DEMO_BUTTON_HEIGHT)
 
 
+def title_start_button_rect() -> tuple[int, int, int, int]:
+    return ((WIDTH - TITLE_BUTTON_WIDTH) // 2, TITLE_START_Y, TITLE_BUTTON_WIDTH, TITLE_BUTTON_HEIGHT)
+
+
+def title_mode_button_rect() -> tuple[int, int, int, int]:
+    return ((WIDTH - TITLE_BUTTON_WIDTH) // 2, TITLE_MODE_Y, TITLE_BUTTON_WIDTH, TITLE_BUTTON_HEIGHT)
+
+
+def title_demo_button_rect() -> tuple[int, int, int, int]:
+    return ((WIDTH - TITLE_BUTTON_WIDTH) // 2, TITLE_DEMO_Y, TITLE_BUTTON_WIDTH, TITLE_BUTTON_HEIGHT)
+
+
+def title_sound_button_rect() -> tuple[int, int, int, int]:
+    return ((WIDTH - TITLE_BUTTON_WIDTH) // 2, TITLE_SOUND_Y, TITLE_BUTTON_WIDTH, TITLE_BUTTON_HEIGHT)
+
+
+def title_shooting_star_phase(frame: int) -> int | None:
+    cycle_frame = (frame - TITLE_SHOOTING_STAR_FIRST_FRAME) % TITLE_SHOOTING_STAR_INTERVAL_FRAMES
+    if 0 <= cycle_frame < TITLE_SHOOTING_STAR_DURATION_FRAMES:
+        return cycle_frame
+    return None
+
+
 def result_retry_button_rect() -> tuple[int, int, int, int]:
     total_width = RESULT_RETRY_BUTTON_WIDTH + RESULT_RETRY_BUTTON_GAP + RESULT_RETRY_HARD_BUTTON_WIDTH
     x = (WIDTH - total_width) // 2
-    return (x, HEIGHT - 82, RESULT_RETRY_BUTTON_WIDTH, RESULT_RETRY_BUTTON_HEIGHT)
+    return (x, RESULT_TITLE_BUTTON_Y - RESULT_RETRY_BUTTON_HEIGHT - 6, RESULT_RETRY_BUTTON_WIDTH, RESULT_RETRY_BUTTON_HEIGHT)
 
 
 def result_retry_hard_button_rect() -> tuple[int, int, int, int]:
@@ -272,9 +361,44 @@ def result_retry_hard_button_rect() -> tuple[int, int, int, int]:
     )
 
 
+def result_title_button_rect() -> tuple[int, int, int, int]:
+    return ((WIDTH - RESULT_TITLE_BUTTON_WIDTH) // 2, RESULT_TITLE_BUTTON_Y, RESULT_TITLE_BUTTON_WIDTH, RESULT_TITLE_BUTTON_HEIGHT)
+
+
 def point_in_rect(x: int, y: int, rect: tuple[int, int, int, int]) -> bool:
     rect_x, rect_y, rect_width, rect_height = rect
     return rect_x <= x < rect_x + rect_width and rect_y <= y < rect_y + rect_height
+
+
+def clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def edge_indicator_position(
+    target_screen_x: float,
+    target_screen_y: float,
+    width: int,
+    height: int,
+    margin: int,
+) -> tuple[int, int]:
+    center_x = width * 0.5
+    center_y = height * 0.5
+    dx = target_screen_x - center_x
+    dy = target_screen_y - center_y
+    if abs(dx) < 0.001 and abs(dy) < 0.001:
+        return (int(center_x), int(center_y))
+
+    candidates: list[float] = []
+    if dx > 0:
+        candidates.append((width - margin - center_x) / dx)
+    elif dx < 0:
+        candidates.append((margin - center_x) / dx)
+    if dy > 0:
+        candidates.append((height - margin - center_y) / dy)
+    elif dy < 0:
+        candidates.append((margin - center_y) / dy)
+    scale = min(candidate for candidate in candidates if candidate >= 0.0)
+    return (int(round(center_x + dx * scale)), int(round(center_y + dy * scale)))
 
 
 PIXEL_FONT_3X5: dict[str, tuple[str, ...]] = {
@@ -532,6 +656,7 @@ class GravityCourierApp:
         self.show_preview = True
         self.show_debug = False
         self.demo_mode = False
+        self.title_demo_enabled = False
         self.course_mode_key = DEFAULT_COURSE_MODE_KEY
         self.game_state = STATE_PLAYING
         self.result_summary: ResultSummary | None = None
@@ -574,6 +699,7 @@ class GravityCourierApp:
         self.result_test_preset_index = 0
         self.last_result_test_crew_count = 0
         self.thrusting = False
+        self.audio = AudioManager()
         self.demo_orbit_index: int | None = None
         self.demo_orbit_prev_angle: float | None = None
         self.demo_orbit_turns = 0.0
@@ -582,6 +708,20 @@ class GravityCourierApp:
         self.orbit_focus_strength = 0.0
         self.orbit_focus_planet_index: int | None = None
         self.orbit_focus_switch_release_timer = 0
+        self.off_course_active = False
+        self.off_course_target_type = "-"
+        self.off_course_target_index: int | None = None
+        self.off_course_distance = 0.0
+        self.off_course_stall_frames = 0
+        self.off_course_previous_distance: float | None = None
+        self.off_course_previous_target_key: tuple[str, int | None] | None = None
+        self.touch_controls = TouchControlState()
+        self.touch_thrust_pulse_frames = 0
+        self.touch_brake_pulse_frames = 0
+        self.goal_test_flick_active = False
+        self.goal_test_flick_last_x = 0.0
+        self.title_audio_started_in_update = False
+        self.title_menu_index = TITLE_MENU_START
         self.frame = 0
         self.restart()
 
@@ -652,8 +792,58 @@ class GravityCourierApp:
         self.orbit_focus_strength = 0.0
         self.orbit_focus_planet_index = None
         self.orbit_focus_switch_release_timer = 0
+        self.off_course_active = False
+        self.off_course_target_type = "-"
+        self.off_course_target_index = None
+        self.off_course_distance = 0.0
+        self.off_course_stall_frames = 0
+        self.off_course_previous_distance = None
+        self.off_course_previous_target_key = None
+        self.touch_controls = TouchControlState()
+        self.touch_thrust_pulse_frames = 0
+        self.touch_brake_pulse_frames = 0
+        self.goal_test_flick_active = False
+        self.goal_test_flick_last_x = 0.0
         self.camera.zoom = 1.0
         self.frame = 0
+        if self.pyxel is not None:
+            self.audio.start_bgm(self.pyxel)
+
+    def enter_title(self) -> None:
+        self.game_state = STATE_TITLE
+        self.demo_mode = False
+        self.result_summary = None
+        self.thrusting = False
+        self.touch_controls = TouchControlState()
+        self.touch_thrust_pulse_frames = 0
+        self.touch_brake_pulse_frames = 0
+        self.title_audio_started_in_update = False
+        self.title_menu_index = TITLE_MENU_START
+        if self.pyxel is not None:
+            self.audio.stop_bgm(self.pyxel)
+            self.audio.start_title_bgm(self.pyxel)
+
+    def _start_run(self, demo_mode: bool = False) -> None:
+        self.demo_mode = demo_mode
+        self.restart()
+        self.game_state = STATE_PLAYING
+
+    def _start_title_selected_run(self) -> None:
+        self._start_run(demo_mode=self.title_demo_enabled)
+
+    def _toggle_sound(self) -> bool:
+        if self.pyxel is None:
+            self.audio.enabled = not self.audio.enabled
+            return self.audio.enabled
+        if self.game_state == STATE_TITLE and not self.audio.enabled:
+            self.audio.enabled = True
+            self.audio.start_title_bgm(self.pyxel)
+            return True
+        if self.game_state == STATE_RESULT and not self.audio.enabled:
+            self.audio.enabled = True
+            self.audio.start_result_bgm(self.pyxel)
+            return True
+        return self.audio.toggle_enabled(self.pyxel)
 
     def run(self) -> None:
         try:
@@ -666,6 +856,8 @@ class GravityCourierApp:
         if hasattr(pyxel, "mouse"):
             pyxel.mouse(True)
         self.resident_resources = load_resident_resources(pyxel)
+        self.audio.configure(pyxel)
+        self.enter_title()
         pyxel.run(self.update, self.draw)
 
     def update(self) -> None:
@@ -675,13 +867,20 @@ class GravityCourierApp:
 
         if pyxel.btnp(pyxel.KEY_ESCAPE):
             pyxel.quit()
-        if pyxel.btnp(pyxel.KEY_R):
+        if pyxel.btnp(pyxel.KEY_R) and self.game_state != STATE_TITLE:
             self.restart()
             return
         if pyxel.btnp(pyxel.KEY_SPACE):
             self.show_preview = not self.show_preview
         if pyxel.btnp(pyxel.KEY_D):
             self.show_debug = not self.show_debug
+        key_s = getattr(pyxel, "KEY_S", None)
+        if key_s is not None and pyxel.btnp(key_s):
+            self._toggle_sound()
+        if self.game_state == STATE_TITLE:
+            self._update_title(pyxel)
+            self.frame += 1
+            return
         if pyxel.btnp(pyxel.KEY_M) or self._demo_button_pressed(pyxel):
             self.demo_mode = not self.demo_mode
         key_n = getattr(pyxel, "KEY_N", None)
@@ -690,11 +889,31 @@ class GravityCourierApp:
             return
         key_g = getattr(pyxel, "KEY_G", None)
         goal_test_key_pressed = key_g is not None and pyxel.btnp(key_g)
-        if self._goal_test_available() and (goal_test_key_pressed or self._goal_test_button_pressed(pyxel)):
-            self._activate_goal_test()
-            return
+        key_return = getattr(pyxel, "KEY_RETURN", None)
+        key_enter = getattr(pyxel, "KEY_ENTER", None)
+        goal_test_enter_pressed = (key_return is not None and pyxel.btnp(key_return)) or (
+            key_enter is not None and pyxel.btnp(key_enter)
+        )
+        if self._goal_test_available():
+            if goal_test_key_pressed:
+                self._cycle_goal_test_preset()
+                return
+            if self.demo_mode:
+                if goal_test_enter_pressed or self._goal_test_button_pressed(pyxel) or self._goal_test_button_flicked(pyxel):
+                    self._cycle_goal_test_preset()
+                    return
+            else:
+                self._reset_goal_test_flick()
+            if goal_test_enter_pressed or self._goal_test_button_pressed(pyxel):
+                self._activate_goal_test()
+                return
+        else:
+            self._reset_goal_test_flick()
 
         if self.game_state == STATE_RESULT:
+            if self._result_title_button_pressed(pyxel):
+                self.enter_title()
+                return
             if self._result_retry_hard_button_pressed(pyxel):
                 self._restart_hard_course()
                 return
@@ -707,6 +926,9 @@ class GravityCourierApp:
 
         self.cutin.tick()
         if self.rocket.crashed or self.rocket.lost:
+            if self.game_state != STATE_CRASHED:
+                self.audio.play_crash(pyxel)
+                self.audio.stop_bgm(pyxel)
             self.game_state = STATE_CRASHED
             self.thrusting = False
             self._update_orbit_focus()
@@ -737,17 +959,7 @@ class GravityCourierApp:
                     command = choose_demo_command(self.rocket, self.planets, self.demo_orbit_done_indices)
                 self._apply_demo_command(command)
         else:
-            lateral_input = 0.0
-            if pyxel.btn(pyxel.KEY_LEFT):
-                lateral_input -= 1.0
-            if pyxel.btn(pyxel.KEY_RIGHT):
-                lateral_input += 1.0
-            self._apply_controls(
-                lateral_input,
-                pyxel.btn(pyxel.KEY_UP),
-                pyxel.btn(pyxel.KEY_DOWN),
-                spend_fuel=True,
-            )
+            self._apply_control_intent(self._control_intent(pyxel), spend_fuel=True)
 
         self._update_planets()
         self.rocket = step_rocket(self.rocket, self._gravity_planets_for_step())
@@ -783,6 +995,7 @@ class GravityCourierApp:
             self.frame += 1
             return
 
+        self._update_off_course_helper()
         self._update_orbit_focus()
         self.camera.follow(self._camera_follow_target())
         self.message_timer = max(0, self.message_timer - 1)
@@ -798,12 +1011,162 @@ class GravityCourierApp:
         self.interplanet_feedback_timer = max(0, self.interplanet_feedback_timer - 1)
         self.frame += 1
 
+    def _update_title(self, pyxel: Any) -> None:
+        self._update_title_ambient(pyxel)
+        key_left = getattr(pyxel, "KEY_LEFT", None)
+        key_right = getattr(pyxel, "KEY_RIGHT", None)
+        key_up = getattr(pyxel, "KEY_UP", None)
+        key_down = getattr(pyxel, "KEY_DOWN", None)
+        key_z = getattr(pyxel, "KEY_Z", None)
+        key_return = getattr(pyxel, "KEY_RETURN", None)
+        key_enter = getattr(pyxel, "KEY_ENTER", None)
+        if key_up is not None and pyxel.btnp(key_up):
+            self._move_title_menu_selection(-1)
+            return
+        if key_down is not None and pyxel.btnp(key_down):
+            self._move_title_menu_selection(1)
+            return
+        if (
+            (key_left is not None and pyxel.btnp(key_left))
+            or (key_right is not None and pyxel.btnp(key_right))
+        ):
+            self._adjust_title_menu_selection()
+            return
+        if self._title_mode_button_pressed(pyxel):
+            self.title_menu_index = TITLE_MENU_MODE
+            self._select_next_course_mode()
+            return
+        if pyxel.btnp(pyxel.KEY_M) or self._title_demo_button_pressed(pyxel):
+            self.title_menu_index = TITLE_MENU_DEMO
+            self._toggle_title_demo()
+            return
+        if self._title_sound_button_pressed(pyxel):
+            self.title_menu_index = TITLE_MENU_SOUND
+            self._toggle_sound()
+            return
+        start_pressed = self._title_start_button_pressed(pyxel)
+        if key_z is not None:
+            start_pressed = start_pressed or pyxel.btnp(key_z)
+        if start_pressed:
+            self._start_title_selected_run()
+            return
+        if (key_return is not None and pyxel.btnp(key_return)) or (key_enter is not None and pyxel.btnp(key_enter)):
+            self._activate_title_menu_selection()
+
+    def _move_title_menu_selection(self, direction: int) -> None:
+        self.title_menu_index = (self.title_menu_index + direction) % TITLE_MENU_COUNT
+
+    def _adjust_title_menu_selection(self) -> None:
+        if self.title_menu_index == TITLE_MENU_MODE:
+            self._select_next_course_mode()
+        elif self.title_menu_index == TITLE_MENU_DEMO:
+            self._toggle_title_demo()
+        elif self.title_menu_index == TITLE_MENU_SOUND:
+            self._toggle_sound()
+
+    def _activate_title_menu_selection(self) -> None:
+        if self.title_menu_index == TITLE_MENU_START:
+            self._start_title_selected_run()
+
+    def _toggle_title_demo(self) -> None:
+        self.title_demo_enabled = not self.title_demo_enabled
+
+    def _update_title_ambient(self, pyxel: Any) -> None:
+        if not self.title_audio_started_in_update:
+            self.audio.stop_bgm(pyxel)
+            self.audio.start_title_bgm(pyxel)
+            self.title_audio_started_in_update = True
+        if title_shooting_star_phase(self.frame) == 0:
+            self.audio.play_title_shooting_star(pyxel)
+
     def _update_journey_progress(self) -> None:
         self.highest_course_planet_index = journey_planet_progress(
             self.rocket.position.y,
             self.planets,
             self.highest_course_planet_index,
         )
+
+    def _next_course_planet_index(self) -> int | None:
+        if not self.planets:
+            return None
+        current = max(0, min(len(self.planets) - 1, self.highest_course_planet_index))
+        for index in range(current, len(self.planets)):
+            planet = self.planets[index]
+            if self.rocket.position.y > planet.position.y - planet.gravity_well_radius:
+                return index
+        return None
+
+    def _off_course_target(self) -> tuple[str, int | None, Vec2]:
+        planet_index = self._next_course_planet_index()
+        if planet_index is None:
+            return ("goal", None, self.final_goal.position)
+        return ("planet", planet_index, self.planets[planet_index].position)
+
+    def _update_off_course_helper(self) -> None:
+        if self.game_state != STATE_PLAYING or self.rocket.crashed or self.rocket.lost:
+            self._reset_off_course_helper()
+            return
+
+        target_type, target_index, target_position = self._off_course_target()
+        target_key = (target_type, target_index)
+        distance = self.rocket.position.distance_to(target_position)
+        if target_key != self.off_course_previous_target_key:
+            self.off_course_stall_frames = 0
+            self.off_course_previous_distance = distance
+            self.off_course_previous_target_key = target_key
+        elif self.off_course_previous_distance is not None:
+            if distance < self.off_course_previous_distance - 5.0:
+                self.off_course_stall_frames = 0
+            else:
+                self.off_course_stall_frames += 1
+            self.off_course_previous_distance = distance
+
+        target_screen = self.camera.world_to_screen(target_position)
+        target_visible = self._off_course_target_is_visible(target_screen)
+        moving_away = self._rocket_moving_away_from_target(target_position)
+        no_planets_visible = not self._has_visible_course_planet()
+        needs_recovery_hint = (
+            not target_visible
+            or distance >= OFF_COURSE_DISTANCE_THRESHOLD
+            or self.off_course_stall_frames >= OFF_COURSE_STALL_FRAMES
+            or moving_away
+        )
+        self.off_course_active = no_planets_visible and needs_recovery_hint
+        self.off_course_target_type = target_type
+        self.off_course_target_index = target_index
+        self.off_course_distance = distance
+
+    def _reset_off_course_helper(self) -> None:
+        self.off_course_active = False
+        self.off_course_target_type = "-"
+        self.off_course_target_index = None
+        self.off_course_distance = 0.0
+        self.off_course_stall_frames = 0
+        self.off_course_previous_distance = None
+        self.off_course_previous_target_key = None
+
+    def _off_course_target_is_visible(self, target_screen: Vec2) -> bool:
+        return (
+            OFF_COURSE_MARGIN <= target_screen.x <= WIDTH - OFF_COURSE_MARGIN
+            and OFF_COURSE_SAFE_TOP <= target_screen.y <= HEIGHT - OFF_COURSE_SAFE_BOTTOM
+        )
+
+    def _has_visible_course_planet(self) -> bool:
+        for planet in self.planets:
+            screen = self.camera.world_to_screen(planet.position)
+            margin = self._world_screen_radius(planet.gravity_well_radius) + 4
+            if -margin <= screen.x <= WIDTH + margin and -margin <= screen.y <= HEIGHT + margin:
+                return True
+        return False
+
+    def _rocket_moving_away_from_target(self, target_position: Vec2) -> bool:
+        target_vector = target_position - self.rocket.position
+        distance = target_vector.length()
+        if distance <= 1.0:
+            return False
+        direction = target_vector / distance
+        away_speed = -(self.rocket.velocity.x * direction.x + self.rocket.velocity.y * direction.y)
+        return away_speed >= OFF_COURSE_AWAY_SPEED_THRESHOLD
 
     def _try_complete_final_goal(self) -> bool:
         if self.game_state != STATE_PLAYING:
@@ -812,6 +1175,10 @@ class GravityCourierApp:
             return False
         if not reached_final_goal(self.rocket.position, self.final_goal):
             return False
+        if self.pyxel is not None:
+            self.audio.stop_bgm(self.pyxel)
+            self.audio.start_result_bgm(self.pyxel)
+            self.audio.play_result(self.pyxel)
         self.game_state = STATE_RESULT
         self.thrusting = False
         self.highest_course_planet_index = max(0, len(self.planets) - 1)
@@ -840,6 +1207,26 @@ class GravityCourierApp:
             return False
         return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), demo_button_rect())
 
+    def _title_start_button_pressed(self, pyxel: Any) -> bool:
+        return self._screen_button_pressed(pyxel, title_start_button_rect())
+
+    def _title_mode_button_pressed(self, pyxel: Any) -> bool:
+        return self._screen_button_pressed(pyxel, title_mode_button_rect())
+
+    def _title_demo_button_pressed(self, pyxel: Any) -> bool:
+        return self._screen_button_pressed(pyxel, title_demo_button_rect())
+
+    def _title_sound_button_pressed(self, pyxel: Any) -> bool:
+        return self._screen_button_pressed(pyxel, title_sound_button_rect())
+
+    def _screen_button_pressed(self, pyxel: Any, rect: tuple[int, int, int, int]) -> bool:
+        mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
+        if mouse_button is None:
+            return False
+        if not pyxel.btnp(mouse_button):
+            return False
+        return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), rect)
+
     def _result_retry_button_pressed(self, pyxel: Any) -> bool:
         mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
         if mouse_button is None:
@@ -856,6 +1243,14 @@ class GravityCourierApp:
             return False
         return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), result_retry_hard_button_rect())
 
+    def _result_title_button_pressed(self, pyxel: Any) -> bool:
+        mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
+        if mouse_button is None:
+            return False
+        if not pyxel.btnp(mouse_button):
+            return False
+        return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), result_title_button_rect())
+
     def _goal_test_available(self) -> bool:
         return self.game_state == STATE_PLAYING and (self.show_debug or self.demo_mode)
 
@@ -867,9 +1262,41 @@ class GravityCourierApp:
             return False
         return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), goal_test_button_rect())
 
+    def _goal_test_button_flicked(self, pyxel: Any) -> bool:
+        mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
+        if mouse_button is None or not hasattr(pyxel, "btn"):
+            self._reset_goal_test_flick()
+            return False
+        if not pyxel.btn(mouse_button):
+            self._reset_goal_test_flick()
+            return False
+        x = float(getattr(pyxel, "mouse_x", 0.0))
+        y = float(getattr(pyxel, "mouse_y", 0.0))
+        if not point_in_rect(int(x), int(y), goal_test_button_rect()):
+            self._reset_goal_test_flick()
+            return False
+        if not self.goal_test_flick_active:
+            self.goal_test_flick_active = True
+            self.goal_test_flick_last_x = x
+            return False
+        dx = x - self.goal_test_flick_last_x
+        if abs(dx) < GOAL_TEST_FLICK_THRESHOLD:
+            return False
+        self.goal_test_flick_last_x = x
+        return True
+
+    def _reset_goal_test_flick(self) -> None:
+        self.goal_test_flick_active = False
+        self.goal_test_flick_last_x = 0.0
+
+    def _cycle_goal_test_preset(self) -> None:
+        self.result_test_preset_index = (self.result_test_preset_index + 1) % len(RESULT_TEST_CREW_PRESETS)
+        self.cheer_text = "GOAL TEST"
+        self.last_score_gain = RESULT_TEST_CREW_PRESETS[self.result_test_preset_index]
+        self.message_timer = ASSIST_MESSAGE_FRAMES
+
     def _activate_goal_test(self) -> None:
         crew_count = RESULT_TEST_CREW_PRESETS[self.result_test_preset_index]
-        self.result_test_preset_index = (self.result_test_preset_index + 1) % len(RESULT_TEST_CREW_PRESETS)
         self.last_result_test_crew_count = crew_count
         self._assign_result_test_crew(crew_count)
 
@@ -879,8 +1306,9 @@ class GravityCourierApp:
         self.rocket.hp = self.rocket.max_hp
         self.rocket.shield = self.rocket.max_shield
         self.rocket.fuel = ROCKET_FUEL_MAX
-        self.rocket.position = self.final_goal.position + Vec2(0.0, self.final_goal.arrival_radius + 4.0)
-        self.rocket.velocity = Vec2(0.0, -5.0)
+        goal_test_offset = self.final_goal.arrival_radius + GOAL_TEST_APPROACH_DISTANCE
+        self.rocket.position = self.final_goal.position + Vec2(0.0, goal_test_offset)
+        self.rocket.velocity = Vec2(0.0, GOAL_TEST_APPROACH_SPEED)
         self.rocket.angle = -math.pi / 2
         self.rocket.max_distance = max(self.rocket.max_distance, START_POSITION.y - self.rocket.position.y)
         self.score = 10000 + crew_count * 75
@@ -974,12 +1402,130 @@ class GravityCourierApp:
         }
 
     def _toggle_course_mode(self) -> None:
-        self.course_mode_key = next_course_mode_key(self.course_mode_key)
+        self._select_next_course_mode()
         self.restart()
+
+    def _select_next_course_mode(self) -> None:
+        self.course_mode_key = next_course_mode_key(self.course_mode_key)
 
     def _restart_hard_course(self) -> None:
         self.course_mode_key = COURSE_MODE_HARD
         self.restart()
+
+    def _control_intent(self, pyxel: Any) -> ControlIntent:
+        keyboard = self._keyboard_control_intent(pyxel)
+        touch = self._touch_control_intent(pyxel)
+        return ControlIntent(
+            rotate_axis=clamp(keyboard.rotate_axis + touch.rotate_axis, -1.0, 1.0),
+            thrust_axis=clamp(max(keyboard.thrust_axis, touch.thrust_axis), 0.0, 1.0),
+            brake_axis=clamp(max(keyboard.brake_axis, touch.brake_axis), 0.0, 1.0),
+            thrust_pulse=clamp(max(keyboard.thrust_pulse, touch.thrust_pulse), 0.0, 1.0),
+            brake_pulse=clamp(max(keyboard.brake_pulse, touch.brake_pulse), 0.0, 1.0),
+        )
+
+    def _keyboard_control_intent(self, pyxel: Any) -> ControlIntent:
+        rotate = 0.0
+        key_left = getattr(pyxel, "KEY_LEFT", None)
+        key_right = getattr(pyxel, "KEY_RIGHT", None)
+        key_up = getattr(pyxel, "KEY_UP", None)
+        key_down = getattr(pyxel, "KEY_DOWN", None)
+        if key_left is not None and pyxel.btn(key_left):
+            rotate -= 1.0
+        if key_right is not None and pyxel.btn(key_right):
+            rotate += 1.0
+        return ControlIntent(
+            rotate_axis=rotate,
+            thrust_axis=1.0 if key_up is not None and pyxel.btn(key_up) else 0.0,
+            brake_axis=1.0 if key_down is not None and pyxel.btn(key_down) else 0.0,
+        )
+
+    def _touch_control_intent(self, pyxel: Any) -> ControlIntent:
+        mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
+        if mouse_button is None or not hasattr(pyxel, "btn"):
+            self._release_touch_control()
+            return self._active_touch_pulse_intent()
+        pressed = pyxel.btn(mouse_button)
+        x = float(getattr(pyxel, "mouse_x", 0.0))
+        y = float(getattr(pyxel, "mouse_y", 0.0))
+        if not pressed:
+            self._release_touch_control()
+            return self._active_touch_pulse_intent()
+        if self._touch_on_screen_button(int(x), int(y)):
+            self._release_touch_control()
+            return self._active_touch_pulse_intent()
+
+        if not self.touch_controls.active:
+            self.touch_controls = TouchControlState(active=True, last_x=x, last_y=y)
+            return self._active_touch_pulse_intent()
+
+        dx = x - self.touch_controls.last_x
+        dy = y - self.touch_controls.last_y
+        self.touch_controls.last_x = x
+        self.touch_controls.last_y = y
+        self.touch_controls.accumulated_vertical += dy
+        if self.touch_controls.accumulated_vertical <= -TOUCH_VERTICAL_SWIPE_THRESHOLD:
+            self.touch_thrust_pulse_frames = TOUCH_THRUST_PULSE_FRAMES
+            self.touch_controls.accumulated_vertical = 0.0
+        elif self.touch_controls.accumulated_vertical >= TOUCH_VERTICAL_SWIPE_THRESHOLD:
+            self.touch_brake_pulse_frames = TOUCH_BRAKE_PULSE_FRAMES
+            self.touch_controls.accumulated_vertical = 0.0
+
+        speed_ratio = clamp(self.rocket.velocity.length() / TOUCH_HIGH_SPEED_REFERENCE, 0.0, 1.0)
+        assist = 1.0 + speed_ratio * TOUCH_HIGH_SPEED_TURN_ASSIST
+        rotate = clamp(dx / TOUCH_DRAG_FULL_RESPONSE_PIXELS * assist, -1.0, 1.0)
+        pulse_intent = self._active_touch_pulse_intent()
+        return ControlIntent(
+            rotate_axis=rotate,
+            thrust_pulse=pulse_intent.thrust_pulse,
+            brake_pulse=pulse_intent.brake_pulse,
+        )
+
+    def _release_touch_control(self) -> None:
+        if self.touch_controls.active:
+            self.touch_controls = TouchControlState()
+
+    def _touch_on_screen_button(self, x: int, y: int) -> bool:
+        if self.game_state == STATE_TITLE:
+            return any(
+                point_in_rect(x, y, rect)
+                for rect in (
+                    title_start_button_rect(),
+                    title_mode_button_rect(),
+                    title_demo_button_rect(),
+                    title_sound_button_rect(),
+                )
+            )
+        if self.game_state == STATE_RESULT:
+            return any(
+                point_in_rect(x, y, rect)
+                for rect in (
+                    result_title_button_rect(),
+                    result_retry_button_rect(),
+                    result_retry_hard_button_rect(),
+                )
+            )
+        if point_in_rect(x, y, demo_button_rect()):
+            return True
+        return self._goal_test_available() and point_in_rect(x, y, goal_test_button_rect())
+
+    def _active_touch_pulse_intent(self) -> ControlIntent:
+        thrust = TOUCH_THRUST_PULSE_STRENGTH if self.touch_thrust_pulse_frames > 0 else 0.0
+        brake = TOUCH_BRAKE_PULSE_STRENGTH if self.touch_brake_pulse_frames > 0 else 0.0
+        self.touch_thrust_pulse_frames = max(0, self.touch_thrust_pulse_frames - 1)
+        self.touch_brake_pulse_frames = max(0, self.touch_brake_pulse_frames - 1)
+        return ControlIntent(thrust_pulse=thrust, brake_pulse=brake)
+
+    def _apply_control_intent(self, intent: ControlIntent, spend_fuel: bool) -> None:
+        thrust_strength = max(intent.thrust_axis, intent.thrust_pulse)
+        brake_strength = max(intent.brake_axis, intent.brake_pulse)
+        self._apply_controls(
+            intent.rotate_axis,
+            thrust_strength > 0.0,
+            brake_strength > 0.0,
+            spend_fuel=spend_fuel,
+            boost_strength=thrust_strength,
+            brake_strength=brake_strength,
+        )
 
     def _apply_controls(
         self,
@@ -987,8 +1533,13 @@ class GravityCourierApp:
         boost: bool,
         brake: bool,
         spend_fuel: bool,
+        boost_strength: float = 1.0,
+        brake_strength: float = 1.0,
     ) -> None:
         self.thrusting = False
+        lateral_input = clamp(lateral_input, -1.0, 1.0)
+        boost_strength = clamp(boost_strength, 0.0, 1.0)
+        brake_strength = clamp(brake_strength, 0.0, 1.0)
         forward = from_angle(heading_from_velocity(self.rocket.velocity, self.rocket.angle))
         if lateral_input:
             speed = self.rocket.velocity.length()
@@ -1015,13 +1566,14 @@ class GravityCourierApp:
                 self.rocket.velocity = self.rocket.velocity + right * (next_lateral_speed - lateral_speed)
         if boost and self.rocket.fuel > 0.0:
             forward = from_angle(heading_from_velocity(self.rocket.velocity, self.rocket.angle))
-            thrust = forward * ROCKET_THRUST_POWER
+            thrust = forward * (ROCKET_THRUST_POWER * boost_strength)
             self.rocket.velocity = self.rocket.velocity + thrust
             if spend_fuel:
-                self.rocket.fuel = max(0.0, self.rocket.fuel - ROCKET_FUEL_COST)
+                self.rocket.fuel = max(0.0, self.rocket.fuel - ROCKET_FUEL_COST * boost_strength)
             self.thrusting = True
         if brake:
-            self.rocket.velocity = self.rocket.velocity * ROCKET_BRAKE_DAMPING
+            damping = 1.0 - (1.0 - ROCKET_BRAKE_DAMPING) * brake_strength
+            self.rocket.velocity = self.rocket.velocity * damping
         self._sync_angle_to_velocity()
 
     def _apply_demo_command(self, command: DemoCommand) -> None:
@@ -1060,6 +1612,8 @@ class GravityCourierApp:
             self.demo_orbit_index = orbit_index
             self.demo_orbit_prev_angle = None
             self.demo_orbit_turns = 0.0
+            if self.pyxel is not None:
+                self.audio.play_orbit_enter(self.pyxel)
         radial = self.rocket.position - planet.position
         if radial.length() <= 0.0:
             return
@@ -1191,6 +1745,8 @@ class GravityCourierApp:
             in_orbit=True,
         )
         self.active_orbit_planet_index = planet_index
+        if self.pyxel is not None:
+            self.audio.play_orbit_enter(self.pyxel)
 
     def _finish_orbit_visit(self, planet_index: int) -> None:
         if planet_index >= len(self.orbit_progress):
@@ -1268,6 +1824,8 @@ class GravityCourierApp:
             planet_index,
         )
         self.last_transfer_boost_planet_index = planet_index
+        if self.pyxel is not None:
+            self.audio.play_transfer(self.pyxel)
         self._trigger_crew_celebration()
         self._advance_supply_reservations_after_transfer()
 
@@ -1522,10 +2080,13 @@ class GravityCourierApp:
 
         pyxel.cls(COLOR_BACKGROUND)
         self._draw_starfield()
+        if self.game_state == STATE_TITLE:
+            self._draw_title_screen()
+            return
         if self.game_state == STATE_RESULT:
             self._draw_result_screen()
             return
-        if self.show_preview and not (self.rocket.crashed or self.rocket.lost):
+        if self._trajectory_preview_enabled() and not (self.rocket.crashed or self.rocket.lost):
             self._draw_trajectory()
         self._draw_planets()
         self._draw_final_goal()
@@ -1608,6 +2169,8 @@ class GravityCourierApp:
         self._mark_supply_reservation_collected(ship.reservation_id)
         self.last_crew_join_count = join_count
         self.last_supply_ship_status = "collected"
+        if self.pyxel is not None:
+            self.audio.play_supply(self.pyxel)
         self._trigger_crew_celebration()
         self._trigger_crew_type_celebration(ship.planet_type)
         self.interplanet_feedback_lines = (
@@ -1648,6 +2211,8 @@ class GravityCourierApp:
             ROCKET_FUEL_MAX,
         )
         self.last_collected_supply_item_id = obj.object_id
+        if self.pyxel is not None:
+            self.audio.play_supply(self.pyxel)
         self._trigger_crew_celebration()
         self.interplanet_feedback_lines = (
             f"SUPPLY +{result.score_gain}",
@@ -1709,6 +2274,8 @@ class GravityCourierApp:
         self.last_lap_event_planet_index = planet_index
         self.cheer_text = cheer_text_for_stage(cheer_stage_for_lap(lap))
         self.reward_feedback_text = ""
+        if self.pyxel is not None:
+            self.audio.play_lap(self.pyxel, lap)
         self.rocket.fuel = min(ROCKET_FUEL_MAX, self.rocket.fuel + ASSIST_FUEL_REWARD)
         self._trigger_crew_celebration()
         self._trigger_crew_type_celebration(planet.planet_type)
@@ -1833,6 +2400,12 @@ class GravityCourierApp:
         if self.rocket.hp <= 0:
             self.rocket.crashed = True
             self.game_state = STATE_CRASHED
+        if self.pyxel is not None:
+            if self.rocket.crashed:
+                self.audio.play_crash(self.pyxel)
+                self.audio.stop_bgm(self.pyxel)
+            else:
+                self.audio.play_damage(self.pyxel)
         self.last_damage_source = source
         return DamageResult(
             damaged=True,
@@ -1864,8 +2437,30 @@ class GravityCourierApp:
         for index in range(STAR_COUNT):
             x = (index * 47 + index * index * 3 + int(self.camera.position.x * 0.12)) % WIDTH
             y = (index * 83 + index * index * 5 + int(self.camera.position.y * 0.18)) % HEIGHT
-            color = COLOR_STAR if index % 23 == 0 else COLOR_STAR_DIM
+            color = self._starfield_color(index)
             pyxel.pset(x, y, color)
+            if self.game_state == STATE_TITLE and color == COLOR_STAR and (index + self.frame // 5) % 67 == 0:
+                if 0 < x < WIDTH - 1:
+                    pyxel.pset(x - 1, y, COLOR_STAR_DIM)
+                    pyxel.pset(x + 1, y, COLOR_STAR_DIM)
+                if 0 < y < HEIGHT - 1:
+                    pyxel.pset(x, y - 1, COLOR_STAR_DIM)
+                    pyxel.pset(x, y + 1, COLOR_STAR_DIM)
+
+    def _starfield_color(self, index: int) -> int:
+        if self.game_state != STATE_TITLE:
+            return COLOR_STAR if index % 23 == 0 else COLOR_STAR_DIM
+        if index % 4 != 0:
+            return COLOR_STAR if index % 37 == 0 else COLOR_STAR_DIM
+        phase = (self.frame // 8 + index * 7 + (index * index) // 11) % 48
+        if phase in (0, 1):
+            return COLOR_STAR
+        if phase == 24:
+            return COLOR_BACKGROUND
+        return COLOR_STAR_DIM
+
+    def _trajectory_preview_enabled(self) -> bool:
+        return TRAJECTORY_PREVIEW_ALWAYS_ON or self.show_preview
 
     def _draw_trajectory(self) -> None:
         pyxel = self.pyxel
@@ -1894,9 +2489,10 @@ class GravityCourierApp:
             x = int(screen.x)
             y = int(screen.y)
             radius = self._world_screen_radius(planet.radius)
-            pyxel.circ(x, y, radius, planet.color)
+            self._draw_planet_base(x, y, radius, planet.color)
             self._draw_planet_surface(x, y, radius, planet.planet_type, index)
-            pyxel.circb(x, y, radius, 7)
+            self._draw_planet_atmosphere(x, y, radius, planet.planet_type, index)
+            self._draw_planet_particles(x, y, radius, planet.planet_type, index)
             spec = planet_type_spec(planet.planet_type)
             type_label_width = len(spec.debug_label) * 4 * WORLD_LABEL_SCALE
             type_label_x = int(max(4, min(WIDTH - type_label_width - 4, screen.x - type_label_width / 2)))
@@ -1914,50 +2510,159 @@ class GravityCourierApp:
                     scale=label_scale,
                 )
 
+    def _draw_planet_base(self, x: int, y: int, radius: int, color: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        pyxel.circ(x, y, radius, color)
+        pyxel.circb(x, y, radius, 7)
+
     def _draw_planet_surface(self, x: int, y: int, radius: int, planet_type: str, index: int) -> None:
+        renderer_name = PLANET_RENDERERS.get(planet_type, "_draw_rock_planet")
+        renderer = getattr(self, renderer_name)
+        renderer(x, y, radius, index)
+
+    def _draw_planet_atmosphere(self, x: int, y: int, radius: int, planet_type: str, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        pulse = (self.frame // 18 + index) % 3
+        if planet_type == PLANET_TYPE_WIND:
+            pyxel.circb(x, y, radius + 2 + pulse, COLOR_TRAJECTORY)
+            pyxel.circb(x, y, max(1, radius - 2), 7)
+        elif planet_type == PLANET_TYPE_WATER:
+            pyxel.circb(x, y, radius + 2, 12)
+            if self.frame % 40 < 20:
+                pyxel.circb(x, y, max(1, radius - 3), 7)
+        elif planet_type == PLANET_TYPE_FOREST:
+            pyxel.circb(x, y, radius + 1, 3)
+            pyxel.circb(x, y, radius + 3, 11)
+        elif planet_type == PLANET_TYPE_ROCK:
+            pyxel.circb(x, y, radius, 5)
+            pyxel.circb(x, y, radius + 1, 7)
+        elif planet_type == PLANET_TYPE_IRON:
+            pyxel.circb(x, y, radius, 13)
+            pyxel.circb(x, y, max(1, radius - 4), 1)
+        elif planet_type == PLANET_TYPE_BLACK_HOLE:
+            pyxel.circb(x, y, radius + 2 + pulse, 5)
+            pyxel.circb(x, y, max(3, radius - 3), COLOR_ALERT)
+
+    def _draw_planet_particles(self, x: int, y: int, radius: int, planet_type: str, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        if radius < 10:
+            return
+        phase = self.frame // 8 + index * 5
+        if planet_type == PLANET_TYPE_WIND:
+            for slot in range(3):
+                angle = (phase + slot * 7) * 0.32
+                px = x + int(math.cos(angle) * (radius + 5))
+                py = y + int(math.sin(angle) * (radius + 3))
+                pyxel.pset(px, py, 7 if slot % 2 else COLOR_TRAJECTORY)
+        elif planet_type == PLANET_TYPE_FOREST:
+            for slot in range(3):
+                angle = (phase + slot * 9) * 0.27
+                px = x + int(math.cos(angle) * (radius + 4))
+                py = y + int(math.sin(angle) * (radius + 2))
+                pyxel.pset(px, py, 11)
+        elif planet_type == PLANET_TYPE_ROCK:
+            for slot in range(2):
+                angle = (phase + slot * 11) * 0.22
+                px = x + int(math.cos(angle) * (radius + 4))
+                py = y + int(math.sin(angle) * (radius + 4))
+                pyxel.pset(px, py, 13)
+
+    def _draw_wind_planet(self, x: int, y: int, radius: int, index: int) -> None:
         pyxel = self.pyxel
         assert pyxel is not None
         inner = max(4, radius - 4)
-        phase = (index * 3 + self.frame // 18) % 7
+        phase = (index * 3 + self.frame // 16) % 8
+        for band_index, offset in enumerate((-9, -2, 6, 12)):
+            yy = y + self._scaled_planet_offset(offset, radius) + (phase + band_index) % 3 - 1
+            pyxel.line(x - inner + 4, yy, x - 1, yy - 4, 7)
+            pyxel.line(x + 3, yy - 3, x + inner - 5, yy - 7, COLOR_TRAJECTORY)
+        for slot in range(3):
+            px = x - radius // 2 + slot * max(4, radius // 2)
+            py = y + ((slot * 5 + phase) % max(3, radius // 2)) - radius // 4
+            pyxel.line(px, py, px + max(4, radius // 4), py - 2, 7)
 
-        if planet_type == PLANET_TYPE_WIND:
-            for offset in (-8, 0, 8):
-                yy = y + offset + phase % 3 - 1
-                pyxel.line(x - inner + 4, yy, x + inner - 8, yy - 5, 7)
-                pyxel.line(x - inner + 10, yy + 4, x + inner - 4, yy, COLOR_TRAJECTORY)
-        elif planet_type == PLANET_TYPE_WATER:
-            for offset in (-7, 2, 10):
-                yy = y + offset
-                pyxel.line(x - inner + 4, yy, x - 3, yy + ((offset + phase) % 3) - 1, 12)
-                pyxel.line(x + 1, yy + 1, x + inner - 5, yy - 1, 7)
-            pyxel.circb(x - radius // 3, y - radius // 4, max(2, radius // 6), 12)
-            pyxel.circ(x + radius // 3, y + radius // 5, max(2, radius // 7), 7)
-        elif planet_type == PLANET_TYPE_ROCK:
-            craters = (
-                (-radius // 3, -radius // 5, max(2, radius // 5)),
-                (radius // 4, radius // 4, max(2, radius // 6)),
-                (radius // 5, -radius // 3, max(1, radius // 8)),
-            )
-            for dx, dy, crater_radius in craters:
-                pyxel.circ(x + dx, y + dy, crater_radius, 5)
-                pyxel.circb(x + dx, y + dy, crater_radius, 7)
-        elif planet_type == PLANET_TYPE_FOREST:
-            pyxel.circ(x - radius // 4, y - radius // 5, max(3, radius // 3), 3)
-            pyxel.circ(x + radius // 4, y + radius // 6, max(3, radius // 4), 11)
-            pyxel.tri(x, y - inner + 4, x - 7, y - 2, x + 7, y - 2, 3)
-            pyxel.line(x - inner + 5, y + radius // 3, x + inner - 6, y + radius // 4, 7)
-        elif planet_type == PLANET_TYPE_IRON:
-            pyxel.line(x - inner + 3, y - radius // 3, x + inner - 4, y - radius // 5, 13)
-            pyxel.line(x - inner + 2, y, x + inner - 2, y - 2, 7)
-            pyxel.line(x - inner + 6, y + radius // 3, x + inner - 6, y + radius // 5, 13)
-            pyxel.rect(x - 3, y - inner + 5, 6, inner * 2 - 10, 1)
-            pyxel.line(x - 6, y - inner + 6, x + 6, y - inner + 6, 7)
-        elif planet_type == PLANET_TYPE_BLACK_HOLE:
-            pyxel.circ(x, y, max(3, radius - 5), 0)
-            pyxel.circb(x, y, max(4, radius - 3), 5)
-            pyxel.line(x - inner + 4, y + 2, x + inner - 4, y - 2, COLOR_ALERT)
-        else:
-            pyxel.circb(x - radius // 4, y - radius // 5, max(2, radius // 5), 7)
+    def _draw_iron_planet(self, x: int, y: int, radius: int, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        inner = max(4, radius - 4)
+        pyxel.line(x - inner + 3, y - radius // 3, x + inner - 4, y - radius // 5, 13)
+        pyxel.line(x - inner + 2, y, x + inner - 2, y - 2, 7)
+        pyxel.line(x - inner + 6, y + radius // 3, x + inner - 6, y + radius // 5, 13)
+        pyxel.rect(x - 3, y - inner + 5, 6, inner * 2 - 10, 1)
+        pyxel.line(x - 6, y - inner + 6, x + 6, y - inner + 6, 7)
+        for slot in range(5):
+            dx, dy = self._planet_pattern_point(index, slot, radius - 5)
+            pyxel.pset(x + dx, y + dy, COLOR_ALERT if slot == (self.frame // 20 + index) % 5 else 7)
+
+    def _draw_water_planet(self, x: int, y: int, radius: int, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        inner = max(4, radius - 4)
+        phase = (index * 5 + self.frame // 14) % 9
+        for band_index, offset in enumerate((-8, -1, 6, 12)):
+            yy = y + self._scaled_planet_offset(offset, radius)
+            wave = ((offset + phase + band_index) % 5) - 2
+            pyxel.line(x - inner + 4, yy, x - 4, yy + wave, 12)
+            pyxel.line(x, yy + 1, x + inner - 5, yy - wave, 7)
+        bubbles = (
+            (-radius // 3, -radius // 4, max(2, radius // 7)),
+            (radius // 3, radius // 5, max(2, radius // 8)),
+            (radius // 6, -radius // 3, max(1, radius // 10)),
+        )
+        for dx, dy, bubble_radius in bubbles:
+            pyxel.circb(x + dx, y + dy, bubble_radius, 12)
+
+    def _draw_forest_planet(self, x: int, y: int, radius: int, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        inner = max(4, radius - 4)
+        clusters = (
+            (-radius // 4, -radius // 5, max(3, radius // 3), 3),
+            (radius // 4, radius // 6, max(3, radius // 4), 11),
+            (0, radius // 5, max(2, radius // 5), 3),
+        )
+        for dx, dy, cluster_radius, color in clusters:
+            pyxel.circ(x + dx, y + dy, cluster_radius, color)
+        pyxel.tri(x, y - inner + 4, x - 7, y - 2, x + 7, y - 2, 3)
+        pyxel.line(x - inner + 5, y + radius // 3, x + inner - 6, y + radius // 4, 7)
+        for slot in range(4):
+            dx, dy = self._planet_pattern_point(index + 3, slot, radius - 6)
+            pyxel.pset(x + dx, y + dy, 11)
+
+    def _draw_rock_planet(self, x: int, y: int, radius: int, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        craters = (
+            (-radius // 3, -radius // 5, max(2, radius // 5)),
+            (radius // 4, radius // 4, max(2, radius // 6)),
+            (radius // 5, -radius // 3, max(1, radius // 8)),
+        )
+        for dx, dy, crater_radius in craters:
+            pyxel.circ(x + dx, y + dy, crater_radius, 5)
+            pyxel.circb(x + dx, y + dy, crater_radius, 7)
+        pyxel.line(x - radius // 4, y + radius // 3, x + radius // 6, y + radius // 8, 5)
+        pyxel.line(x + radius // 6, y + radius // 8, x + radius // 3, y + radius // 4, 7)
+
+    def _draw_black_hole_planet(self, x: int, y: int, radius: int, index: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        inner = max(4, radius - 4)
+        pyxel.circ(x, y, max(3, radius - 5), 0)
+        pyxel.circb(x, y, max(4, radius - 3), 5)
+        pyxel.line(x - inner + 4, y + 2, x + inner - 4, y - 2, COLOR_ALERT)
+        pyxel.line(x - inner + 8, y - 4, x + inner - 8, y + 4, 7)
+
+    def _scaled_planet_offset(self, offset: int, radius: int) -> int:
+        return int(round(offset * max(0.65, radius / 20.0)))
+
+    def _planet_pattern_point(self, planet_index: int, slot: int, radius: int) -> tuple[int, int]:
+        seed = planet_index * 31 + slot * 17 + 11
+        angle = (seed % 36) * math.tau / 36.0
+        distance = max(2, radius) * (0.35 + (seed % 5) * 0.10)
+        return int(round(math.cos(angle) * distance)), int(round(math.sin(angle) * distance))
 
     def _draw_final_goal(self) -> None:
         pyxel = self.pyxel
@@ -2474,8 +3179,14 @@ class GravityCourierApp:
         if resident is None:
             return
 
-        sprite = resident.stage_sprites.get(stage) or resident.stage_sprites[0]
-        if self.resident_resources.sprite_available and self._try_draw_resident_sprite(x, y, sprite):
+        sprite_stage = stage
+        if not self.resident_resources.resident_stage_available(resident.planet_type, sprite_stage):
+            sprite_stage = STAGE_IDLE
+        sprite = resident.stage_sprites.get(sprite_stage) or resident.stage_sprites[STAGE_IDLE]
+        if (
+            self.resident_resources.resident_stage_available(resident.planet_type, sprite_stage)
+            and self._try_draw_resident_sprite(x, y, sprite)
+        ):
             return
         self._draw_fallback_portrait(x, y, resident.fallback_style_id)
 
@@ -2501,8 +3212,8 @@ class GravityCourierApp:
             return False
         return True
 
-    def _draw_hero(self, x: int, y: int, scale: int = 1) -> None:
-        if self.resident_resources.hero_sprite_available and self._try_draw_sprite(x, y, HERO_SPRITE, scale=scale):
+    def _draw_hero(self, x: int, y: int, scale: int = 1, state: str = HERO_STATE_IDLE) -> None:
+        if self.resident_resources.hero_state_available(state) and self._try_draw_sprite(x, y, HERO_SPRITE, scale=scale):
             return
         self._draw_fallback_hero(x, y, scale=scale)
 
@@ -2611,10 +3322,13 @@ class GravityCourierApp:
         fuel_width = int((WIDTH - 32) * max(0.0, min(1.0, self.rocket.fuel / ROCKET_FUEL_MAX)))
         pyxel.rectb(16, HEIGHT - 74, WIDTH - 32, 12, COLOR_HUD)
         pyxel.rect(16, HEIGHT - 74, fuel_width, 12, 11 if self.rocket.fuel > 20 else 8)
-        self._draw_text_scaled_clamped(24, HEIGHT - 56, "LR STEER  UP BOOST", 5, scale=2)
-        self._draw_text_scaled_clamped(24, HEIGHT - 40, "DOWN BRAKE  SPACE PREVIEW", 5, scale=2)
+        self._draw_text_scaled_clamped(24, HEIGHT - 56, "DRAG/LR STEER  UP BOOST", 5, scale=2)
+        self._draw_text_scaled_clamped(24, HEIGHT - 40, "SWIPE/DOWN BRAKE  PREVIEW ON", 5, scale=2)
         mode_hint = f"{self.course.mode.label.upper()}  N MODE"
-        self._draw_text_scaled_clamped(24, HEIGHT - 24, f"{mode_hint}  DEMO M", 5, scale=2)
+        sound_hint = "SOUND ON" if self.audio.enabled else "SOUND OFF"
+        self._draw_text_scaled_clamped(24, HEIGHT - 24, f"{mode_hint}  DEMO M  S {sound_hint}", 5, scale=2)
+
+        self._draw_off_course_helper()
 
         if self.message_timer > 0:
             message_scale = 2
@@ -2695,6 +3409,92 @@ class GravityCourierApp:
             supply_gaps = sum(1 for gap in self.course_gaps if gap.is_supply_wide_gap)
             pyxel.text(8, 298, f"COURSE GAPS {len(self.course_gaps)} SUPPLY {supply_gaps}", 13)
             pyxel.text(8, 308, f"METEOR SWARMS {active_swarms}", 13)
+            pyxel.text(
+                8,
+                318,
+                f"OFF {self.off_course_active} {self.off_course_target_type} {self.off_course_target_index}",
+                13,
+            )
+            pyxel.text(8, 328, f"OFF DIST {self.off_course_distance:.0f} STALL {self.off_course_stall_frames}", 13)
+
+    def _draw_off_course_helper(self) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        if not self.off_course_active:
+            return
+        if self.game_state != STATE_PLAYING or self.rocket.crashed or self.rocket.lost:
+            return
+        if self.cutin.active:
+            return
+
+        target_type, _target_index, target_position = self._off_course_target()
+        target_screen = self.camera.world_to_screen(target_position)
+        arrow_extent = 18
+        center_x, center_y = edge_indicator_position(
+            target_screen.x,
+            target_screen.y,
+            WIDTH,
+            HEIGHT,
+            OFF_COURSE_MARGIN + arrow_extent,
+        )
+        center_x = int(
+            max(
+                OFF_COURSE_MARGIN + arrow_extent,
+                min(WIDTH - OFF_COURSE_MARGIN - arrow_extent, center_x),
+            )
+        )
+        center_y = int(
+            max(
+                OFF_COURSE_SAFE_TOP + arrow_extent,
+                min(HEIGHT - OFF_COURSE_SAFE_BOTTOM - arrow_extent, center_y),
+            )
+        )
+
+        direction = Vec2(target_screen.x - WIDTH * 0.5, target_screen.y - HEIGHT * 0.5)
+        if direction.length() <= 0.001:
+            direction = Vec2(0.0, -1.0)
+        else:
+            direction = direction.normalized()
+        perpendicular = Vec2(-direction.y, direction.x)
+        origin = Vec2(float(center_x), float(center_y))
+        tip = origin + direction * 13.0
+        base = origin - direction * 9.0
+        left = base + perpendicular * 7.0
+        right = base - perpendicular * 7.0
+
+        color = COLOR_ALERT if self.frame % 24 < 12 else COLOR_HUD
+        pyxel.tri(
+            int(round(tip.x)),
+            int(round(tip.y)),
+            int(round(left.x)),
+            int(round(left.y)),
+            int(round(right.x)),
+            int(round(right.y)),
+            color,
+        )
+        pyxel.line(
+            int(round(base.x)),
+            int(round(base.y)),
+            int(round(tip.x)),
+            int(round(tip.y)),
+            COLOR_HUD,
+        )
+
+        label = "GOAL" if target_type == "goal" else "NEXT"
+        if center_y <= OFF_COURSE_SAFE_TOP + 34:
+            label_y = center_y + 18
+            distance_y = center_y + 36
+        else:
+            label_y = center_y - 38
+            distance_y = center_y - 20
+        self._draw_text_centered(center_x, label_y, label, COLOR_ALERT, scale=2)
+        self._draw_text_centered(
+            center_x,
+            distance_y,
+            f"{int(self.off_course_distance):04d}",
+            COLOR_HUD,
+            scale=1,
+        )
 
     def _draw_journey_progress(self) -> None:
         pyxel = self.pyxel
@@ -2747,6 +3547,104 @@ class GravityCourierApp:
         crew_x = x + (width - self._scaled_text_width(crew_label, 1)) // 2
         self._draw_text_scaled(crew_x, y + 22, crew_label, COLOR_HUD, scale=1)
 
+    def _draw_title_screen(self) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        self._draw_title_shooting_star()
+        self._draw_text_centered_shimmer(WIDTH // 2, 92, "GRAVITY", scale=5)
+        self._draw_text_centered(WIDTH // 2, 132, "COURIER", COLOR_HUD, scale=5)
+        self._draw_text_centered(WIDTH // 2, 184, "ORBIT. GATHER. RETURN.", COLOR_ALERT, scale=2)
+        self._draw_title_mode_summary()
+        self._draw_title_button(
+            title_start_button_rect(),
+            "START",
+            primary=True,
+            selected=self.title_menu_index == TITLE_MENU_START,
+        )
+        mode_spec = COURSE_MODES[self.course_mode_key]
+        self._draw_title_button(
+            title_mode_button_rect(),
+            f"MODE {mode_spec.label.upper()}",
+            subtitle=f"{mode_spec.planet_count} PLANETS",
+            selected=self.title_menu_index == TITLE_MENU_MODE,
+        )
+        demo_label = "DEMO ON" if self.title_demo_enabled else "DEMO OFF"
+        self._draw_title_button(
+            title_demo_button_rect(),
+            demo_label,
+            subtitle="LR / TAP",
+            selected=self.title_menu_index == TITLE_MENU_DEMO,
+        )
+        sound_label = "SOUND ON" if self.audio.enabled else "SOUND OFF"
+        self._draw_title_button(
+            title_sound_button_rect(),
+            sound_label,
+            subtitle="S KEY",
+            selected=self.title_menu_index == TITLE_MENU_SOUND,
+        )
+        self._draw_text_centered(WIDTH // 2, HEIGHT - 124, "DRAG TURN  SWIPE SPEED", COLOR_HUD, scale=2)
+        self._draw_text_centered(WIDTH // 2, HEIGHT - 100, "UD SELECT  ENTER START  LR CHANGE", 5, scale=2)
+
+    def _draw_title_shooting_star(self) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        phase = title_shooting_star_phase(self.frame)
+        if phase is None:
+            return
+        progress = phase / max(1, TITLE_SHOOTING_STAR_DURATION_FRAMES - 1)
+        start_x = WIDTH + 26
+        start_y = 86
+        end_x = -48
+        end_y = 204
+        head_x = int(start_x + (end_x - start_x) * progress)
+        head_y = int(start_y + (end_y - start_y) * progress)
+        tail_dx = 30
+        tail_dy = -11
+        pyxel.line(head_x, head_y, head_x + tail_dx, head_y + tail_dy, 7)
+        pyxel.line(head_x + 5, head_y - 1, head_x + tail_dx + 12, head_y + tail_dy - 3, COLOR_TRAJECTORY)
+        pyxel.pset(head_x, head_y, COLOR_ALERT)
+        pyxel.pset(head_x - 1, head_y, 7)
+        pyxel.pset(head_x, head_y - 1, 7)
+
+    def _draw_title_mode_summary(self) -> None:
+        mode_spec = COURSE_MODES[self.course_mode_key]
+        label = f"{mode_spec.label.upper()} - {mode_spec.planet_count} PLANETS"
+        self._draw_text_centered(WIDTH // 2, 228, label, COLOR_HUD, scale=2)
+
+    def _draw_title_button(
+        self,
+        rect: tuple[int, int, int, int],
+        label: str,
+        subtitle: str = "",
+        primary: bool = False,
+        selected: bool = False,
+    ) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        x, y, width, height = rect
+        fill_color = COLOR_ALERT if primary else 1
+        border_color = COLOR_HUD if primary else COLOR_GRAVITY_WELL
+        text_color = 1 if primary else COLOR_ALERT
+        pyxel.rect(x, y, width, height, fill_color)
+        pyxel.rectb(x, y, width, height, border_color)
+        pyxel.rectb(x + 2, y + 2, width - 4, height - 4, 5 if primary else COLOR_HUD)
+        if selected:
+            pyxel.rectb(x - 4, y - 4, width + 8, height + 8, COLOR_ALERT)
+            pyxel.tri(x - 16, y + height // 2, x - 8, y + height // 2 - 6, x - 8, y + height // 2 + 6, COLOR_ALERT)
+            pyxel.tri(
+                x + width + 16,
+                y + height // 2,
+                x + width + 8,
+                y + height // 2 - 6,
+                x + width + 8,
+                y + height // 2 + 6,
+                COLOR_ALERT,
+            )
+        text_y = y + 8 if subtitle else y + (height - self._scaled_text_height(2)) // 2
+        self._draw_text_centered(x + width // 2, text_y, label, text_color, scale=2)
+        if subtitle:
+            self._draw_text_centered(x + width // 2, y + 27, subtitle, COLOR_HUD, scale=1)
+
     def _draw_result_screen(self) -> None:
         pyxel = self.pyxel
         assert pyxel is not None
@@ -2757,7 +3655,7 @@ class GravityCourierApp:
         pyxel.rect(18, 26, WIDTH - 36, HEIGHT - 52, 1)
         pyxel.rectb(18, 26, WIDTH - 36, HEIGHT - 52, COLOR_HUD)
         self._draw_text_centered_shimmer(WIDTH // 2, 48, "RETURN COMPLETE", scale=3)
-        self._draw_text_centered(WIDTH // 2, 80, f"RANK {summary.rank}", COLOR_HUD, scale=3)
+        self._draw_result_rank(summary.rank)
 
         left_x = 42
         right_x = WIDTH - 42
@@ -2786,22 +3684,51 @@ class GravityCourierApp:
         self._draw_result_crew_crowd(summary)
         self._draw_result_retry_button()
 
+    def _draw_result_rank(self, rank: str) -> None:
+        if rank != "S":
+            self._draw_text_centered(WIDTH // 2, 80, f"RANK {rank}", COLOR_HUD, scale=3)
+            return
+
+        pyxel = self.pyxel
+        assert pyxel is not None
+        self._draw_text_centered(WIDTH // 2 - 34, 82, "RANK", COLOR_HUD, scale=2)
+        self._draw_result_s_rank_glyph(WIDTH // 2 + 31, 70, scale=7)
+        sparkle_color = (COLOR_ALERT, COLOR_HUD, COLOR_TRAJECTORY, 10)[(self.frame // 4) % 4]
+        center_x = WIDTH // 2 + 31
+        center_y = 88
+        for index, (dx, dy) in enumerate(((-31, -11), (-31, 13), (30, -11), (30, 13), (-8, 25), (12, 25))):
+            color = sparkle_color if (self.frame // 5 + index) % 2 == 0 else COLOR_HUD
+            pyxel.line(center_x + dx - 4, center_y + dy, center_x + dx + 4, center_y + dy, color)
+            pyxel.line(center_x + dx, center_y + dy - 4, center_x + dx, center_y + dy + 4, color)
+
+    def _draw_result_s_rank_glyph(self, center_x: int, y: int, scale: int) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        glyph = PIXEL_FONT_3X5["S"]
+        colors = (COLOR_ALERT, COLOR_HUD, COLOR_TRAJECTORY, 10, 11, 12, 13)
+        x = int(center_x - self._scaled_text_width("S", scale) / 2)
+        color_phase = self.frame // 3
+        for row, pixels in enumerate(glyph):
+            for column, pixel in enumerate(pixels):
+                if pixel == "1":
+                    color = colors[(color_phase + row * 2 + column) % len(colors)]
+                    pyxel.rect(x + column * scale, y + row * scale, scale, scale, color)
+
     def _draw_result_retry_button(self) -> None:
         self._draw_result_button(result_retry_button_rect(), "RETRY")
         self._draw_result_button(result_retry_hard_button_rect(), "RETRY HARD")
-        _x, y, _width, height = result_retry_button_rect()
-        self._draw_text_centered(WIDTH // 2, y + height + 8, "R KEY OK", COLOR_HUD, scale=1)
+        self._draw_result_button(result_title_button_rect(), "BACK TO TITLE", scale=2)
 
-    def _draw_result_button(self, rect: tuple[int, int, int, int], label: str) -> None:
+    def _draw_result_button(self, rect: tuple[int, int, int, int], label: str, scale: int = 2) -> None:
         pyxel = self.pyxel
         assert pyxel is not None
         x, y, width, height = rect
         pyxel.rect(x, y, width, height, COLOR_ALERT)
         pyxel.rectb(x, y, width, height, COLOR_HUD)
         pyxel.rectb(x + 2, y + 2, width - 4, height - 4, 1)
-        text_x = x + (width - self._scaled_text_width(label, 2)) // 2
-        text_y = y + (height - self._scaled_text_height(2)) // 2
-        self._draw_text_scaled(text_x, text_y, label, 1, scale=2)
+        text_x = x + (width - self._scaled_text_width(label, scale)) // 2
+        text_y = y + (height - self._scaled_text_height(scale)) // 2
+        self._draw_text_scaled(text_x, text_y, label, 1, scale=scale)
 
     def _draw_result_confetti(self, summary: ResultSummary) -> None:
         pyxel = self.pyxel
@@ -2939,7 +3866,7 @@ class GravityCourierApp:
         region_left = 24
         region_right = WIDTH - 56
         region_top = 392
-        region_bottom = HEIGHT - 118
+        region_bottom = RESULT_TITLE_BUTTON_Y - 18
         region_width = region_right - region_left
         region_height = region_bottom - region_top
         sprite_size = 32
@@ -2964,8 +3891,10 @@ class GravityCourierApp:
 
     def _draw_result_crew_member(self, planet_type: str, x: int, y: int, seed: int) -> None:
         resident = resident_for_planet_type(planet_type)
-        sprite = resident.stage_sprites[0]
-        drew_sprite = self.resident_resources.sprite_available and self._try_draw_sprite(x, y, sprite, scale=1)
+        sprite = resident.stage_sprites[STAGE_IDLE]
+        drew_sprite = self.resident_resources.resident_stage_available(
+            planet_type, STAGE_IDLE
+        ) and self._try_draw_sprite(x, y, sprite, scale=1)
         if not drew_sprite:
             self._draw_result_fallback_crew_member(planet_type, x, y)
         if planet_type == PLANET_TYPE_ROCK:
@@ -3072,8 +4001,8 @@ class GravityCourierApp:
             if count > 0 and self.crew_type_celebration_timers.get(planet_type, 0) > 0:
                 self._draw_crew_confetti(x + marker_size // 2, draw_y + 2, self.crew_type_celebration_timers[planet_type])
             resident = resident_for_planet_type(planet_type)
-            sprite = resident.stage_sprites[0]
-            if count > 0 and self.resident_resources.sprite_available:
+            sprite = resident.stage_sprites[STAGE_IDLE]
+            if count > 0 and self.resident_resources.resident_stage_available(planet_type, STAGE_IDLE):
                 if not self._try_draw_sprite(x, draw_y, sprite, scale=1):
                     pyxel.rect(x, draw_y, marker_size, marker_size, spec.color)
                     pyxel.rectb(x, draw_y, marker_size, marker_size, COLOR_HUD)

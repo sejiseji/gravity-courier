@@ -21,6 +21,12 @@ STAGE_2 = 2
 STAGE_3 = 3
 CHEER_STAGES = (STAGE_1, STAGE_2, STAGE_3)
 SPRITE_STAGES = (STAGE_IDLE, STAGE_1, STAGE_2, STAGE_3)
+STAGE_LABELS = {
+    STAGE_IDLE: "idle",
+    STAGE_1: "cheer1",
+    STAGE_2: "cheer2",
+    STAGE_3: "cheer3",
+}
 
 
 @dataclass(frozen=True)

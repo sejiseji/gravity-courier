@@ -22,11 +22,18 @@ from gravity_courier.cutin import CUTIN_SIDE_LEFT
 from gravity_courier.planet_types import PLANET_TYPE_WIND, planet_type_spec
 from gravity_courier.resources import (
     HERO_SPRITE,
+    HERO_STATE_CHEER,
+    HERO_STATE_IDLE,
+    HERO_STATE_RESULT,
+    READY_RESIDENT_STAGES,
     ROCKET_SPRITE,
     ResidentResourceState,
+    hero_asset_inventory,
     load_resident_resources,
+    resident_asset_inventory,
     resident_resource_exists,
 )
+from gravity_courier.residents import STAGE_1, STAGE_IDLE
 
 
 class FakePyxelLoader:
@@ -127,6 +134,30 @@ class ResourceLoadingTest(unittest.TestCase):
         self.assertTrue(state.rocket_sprite_available)
         self.assertTrue(state.sprite_available)
         self.assertEqual(len(pyxel.loaded_paths), 1)
+        self.assertTrue(state.hero_state_available(HERO_STATE_IDLE))
+        self.assertFalse(state.hero_state_available(HERO_STATE_CHEER))
+        self.assertTrue(state.resident_stage_available(PLANET_TYPE_WIND, STAGE_IDLE))
+        self.assertFalse(state.resident_stage_available(PLANET_TYPE_WIND, STAGE_1))
+
+    def test_resident_asset_inventory_marks_only_authored_idle_sprites_ready(self) -> None:
+        rows = resident_asset_inventory()
+        wind_rows = [row for row in rows if row.planet_type == PLANET_TYPE_WIND]
+
+        self.assertEqual(len(wind_rows), 4)
+        self.assertEqual([row.stage_label for row in wind_rows], ["idle", "cheer1", "cheer2", "cheer3"])
+        self.assertTrue(wind_rows[0].ready)
+        self.assertEqual(wind_rows[0].note, "ready")
+        self.assertTrue(all(not row.ready for row in wind_rows[1:]))
+        self.assertTrue(all(row.note == "fallback until authored" for row in wind_rows[1:]))
+        self.assertEqual(READY_RESIDENT_STAGES[PLANET_TYPE_WIND], (STAGE_IDLE,))
+
+    def test_hero_asset_inventory_marks_only_idle_ready(self) -> None:
+        rows = hero_asset_inventory()
+        readiness = {row.state: row.ready for row in rows}
+
+        self.assertEqual(readiness[HERO_STATE_IDLE], True)
+        self.assertEqual(readiness[HERO_STATE_CHEER], False)
+        self.assertEqual(readiness[HERO_STATE_RESULT], False)
 
     def test_resource_load_failure_keeps_hero_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -140,6 +171,17 @@ class ResourceLoadingTest(unittest.TestCase):
         self.assertFalse(state.resident_sprite_available)
         self.assertFalse(state.rocket_sprite_available)
         self.assertIn("Could not load", state.warning)
+
+    def test_resident_stage_readiness_can_enable_one_cheer_stage(self) -> None:
+        state = ResidentResourceState(
+            path=RESIDENT_RESOURCE_PATH,
+            resource_loaded=True,
+            hero_sprite_available=True,
+            resident_sprite_available=True,
+            resident_ready_stages={PLANET_TYPE_WIND: (STAGE_IDLE, STAGE_1)},
+        )
+
+        self.assertTrue(state.resident_stage_available(PLANET_TYPE_WIND, STAGE_1))
 
     def test_hero_draw_uses_sprite_only_when_hero_resource_is_ready(self) -> None:
         app = GravityCourierApp()
@@ -158,6 +200,23 @@ class ResourceLoadingTest(unittest.TestCase):
         self.assertEqual(pyxel.calls[0][1][:7], (4, 5, 0, 0, 0, 32, 32))
         self.assertEqual(pyxel.calls[0][1][7], HERO_SPRITE_COLKEY)
         self.assertEqual(pyxel.calls[0][2], {"scale": 1})
+
+    def test_hero_draw_uses_fallback_for_unready_hero_state(self) -> None:
+        app = GravityCourierApp()
+        pyxel = RecordingPyxel()
+        app.pyxel = pyxel
+        app.resident_resources = ResidentResourceState(
+            path=RESIDENT_RESOURCE_PATH,
+            resource_loaded=True,
+            hero_sprite_available=True,
+            hero_ready_states=(HERO_STATE_IDLE,),
+            resident_sprite_available=False,
+        )
+
+        app._draw_hero(4, 5, scale=1, state=HERO_STATE_RESULT)
+
+        self.assertNotIn("blt", {name for name, _args, _kwargs in pyxel.calls})
+        self.assertIn("circ", {name for name, _args, _kwargs in pyxel.calls})
 
     def test_rocket_draw_rotates_sprite_when_resource_is_ready(self) -> None:
         app = GravityCourierApp()
@@ -298,6 +357,26 @@ class ResourceLoadingTest(unittest.TestCase):
         self.assertEqual(CUTIN_RESIDENT_SCALE, 3)
         self.assertEqual(CUTIN_RESIDENT_DRAW_SIZE, 96)
         self.assertEqual(CUTIN_PANEL_HEIGHT, 120)
+
+    def test_cutin_reuses_idle_sprite_when_cheer_stage_sprite_is_not_ready(self) -> None:
+        app = GravityCourierApp()
+        pyxel = RecordingPyxel()
+        app.pyxel = pyxel
+        app.resident_resources = ResidentResourceState(
+            path=RESIDENT_RESOURCE_PATH,
+            resource_loaded=True,
+            hero_sprite_available=True,
+            resident_sprite_available=True,
+            resident_ready_stages={PLANET_TYPE_WIND: (STAGE_IDLE,)},
+        )
+        app.cutin.start(PLANET_TYPE_WIND, lap_count=1, score_gain=100, side=CUTIN_SIDE_LEFT, target_y=100)
+        app.cutin.timer -= 20
+
+        app._draw_cutin_panel()
+
+        blt_calls = [args for name, args, _kwargs in pyxel.calls if name == "blt"]
+        self.assertEqual(blt_calls[0][:7], (44, 142, 0, 0, 32, 32, 32))
+        self.assertEqual(blt_calls[0][7], SPRITE_TRANSPARENT_COLKEY)
 
 
 if __name__ == "__main__":

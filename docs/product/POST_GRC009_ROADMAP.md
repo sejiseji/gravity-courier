@@ -74,17 +74,19 @@ Scope:
 - Lightweight atmospheric animation.
 - Maintain collision/render separation.
 
-## GRC009E: Integrate Resident And Rocket Sprite Assets
+## GRC009E: Complete Resident And Hero Sprite Integration
 
 Scope:
 
 - `.pyxres` resource integration.
 - 23-sprite minimum resident/Hero atlas.
-- 3-state rocket minimum.
+- Per-Hero-state readiness.
+- Per-resident-stage readiness.
 - Primitive fallback retained.
 - Atlas documentation and validation.
 
 This task may wait until the developer has created the sprites in Pyxel Editor.
+Rocket sprite work is handled separately and is not part of this remaining scope.
 
 ## GRC010: Implement Mobile Touch Controls
 
@@ -99,16 +101,29 @@ Scope:
 - Trajectory always on for mobile.
 - Touch debug overlay if needed.
 
-## GRC010A: Implement Title Screen And Mode Selection
+## GRC009G: Gameplay Audio Manager And Stage Sounds
 
 Scope:
 
+- Fallback-safe Pyxel audio manager.
+- Layered title BGM with low accompaniment and high music-box harmony.
+- Thin looping cruise BGM.
+- Lap 1, lap 2, and lap 3+ sounds.
+- Transfer Boost, supply, damage, crash, and result sounds.
+- Temporary sound toggle that can later become title-screen `SOUND ON/OFF`.
+
+## GRC010A: Implement Title Screen And Mode Selection
+
+Implemented scope:
+
 - Title state.
-- START.
-- Normal/Hard selection.
-- DEMO.
+- START button and Z/Enter start.
+- Normal/Hard selection button plus Left/Right selection.
+- DEMO title entry using the existing demo mode.
+- SOUND title control sharing the same state as `S`.
 - Concise control guidance.
-- Touch and keyboard navigation.
+- Touch/click and keyboard navigation.
+- Title-safe audio: layered title BGM while waiting, then gameplay BGM after START/DEMO.
 
 If course modes are not yet implemented, GRC009F must precede this task.
 
@@ -120,7 +135,7 @@ Scope:
 - UI hierarchy.
 - Final feedback polish.
 - Route duration tuning.
-- Sound plan or implementation.
+- Audio balance tuning.
 - Retry flow.
 - Release/debug feature separation.
 - Public prototype readiness.

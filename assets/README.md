@@ -3,7 +3,7 @@
 Reserved Pyxel resource path:
 
 ```text
-assets/gravity_courier.pyxres
+prototypes/gravity_courier/assets/gravity_courier.pyxres
 ```
 
 `gravity_courier.pyxres` now contains the first completed Hero sprite and the first

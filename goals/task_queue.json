@@ -1,0 +1,170 @@
+[
+  {
+    "id": "GRC000",
+    "title": "Prepare Gravity Courier project scaffold",
+    "status": "done",
+    "type": "scaffold",
+    "notes": "Create isolated docs, goals, package skeleton, and validation path."
+  },
+  {
+    "id": "GRC001",
+    "title": "Create first playable gravity-assist prototype",
+    "status": "done",
+    "type": "prototype",
+    "notes": "Implemented rocket controls, planet gravity, trajectory preview, HUD, collision, restart, and gravity assist feedback."
+  },
+  {
+    "id": "GRC002",
+    "title": "Add gameplay roadmap and system specs",
+    "status": "done",
+    "type": "planning",
+    "notes": "Document score/lap, planet rewards, cheering, crew, and interplanet object plans without adding gameplay systems."
+  },
+  {
+    "id": "GRC003",
+    "title": "Implement score, lap count, and planet lap display",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented score value, per-planet lap count, score gain on assist, lap multiplier, large lap display, HUD score, and simple 3-stage cheer text feedback."
+  },
+  {
+    "id": "GRC004",
+    "title": "Implement planet types and 2-lap reward activation",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented planet type definitions and Wind, Iron, Water, Forest, and Rock rewards that activate once at lap 2."
+  },
+  {
+    "id": "GRC005",
+    "title": "Implement resource-backed shared cheer cut-in framework",
+    "status": "done",
+    "type": "presentation",
+    "notes": "Implemented shared cut-in behavior, resident registry, 32x32 sprite metadata, .pyxres-backed portrait loading path with primitive fallback, planet-specific resident IDs, cheer stage effects, timing, and cooldown."
+  },
+  {
+    "id": "GRC005A",
+    "title": "Fix lap event, per-lap cut-ins, side cut-in placement, and Transfer Boost clarity",
+    "status": "done",
+    "type": "gameplay-feedback",
+    "notes": "Separated lap completion from Transfer Boost, moved score/reward/cut-in triggering to completed orbit laps, added side slide-in cut-ins, and clarified Transfer Boost as a one-time gravity-well exit event after one or more laps."
+  },
+  {
+    "id": "GRC005B",
+    "title": "Document supply ship, crew growth, final goal, and result specs",
+    "status": "done",
+    "type": "planning",
+    "notes": "Added the supply ship reservation, crew join sequence, finite shuffle-bag course, Earth-like final goal, result screen, and crossing meteor swarm plan."
+  },
+  {
+    "id": "GRC006",
+    "title": "Implement interplanet obstacles and collectibles",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented floating asteroids, crossing rockets with warning timing, normal supply items, collision/collection logic, shield/HP obstacle damage, and scoring/fuel rewards. Supply ships, crew growth, final goal, result screen, and crossing meteor swarms remain future work."
+  },
+  {
+    "id": "GRC007",
+    "title": "Implement supply ship and crew growth UI",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented lap 3 supply ship reservations, deterministic 2-3 Transfer Boost delay approximation, cargo score/fuel/crew rewards, planet-type crew counts, [1,2,4,8,16,32,64] crew joins, missed-cargo rules, protagonist marker, and compact in-run crew display."
+  },
+  {
+    "id": "GRC008",
+    "title": "Tune finite course generation, difficulty, and meteor swarms",
+    "status": "done",
+    "type": "tuning",
+    "notes": "Implemented seeded 35-planet shuffle-bag course generation, exactly 7 appearances per normal type, fairness constraints, course gap metadata, supply gap marking, crossing meteor swarms, and deterministic difficulty helpers. Deeper balance tuning remains future work."
+  },
+  {
+    "id": "GRC009P",
+    "title": "Document post-goal polish, mode, navigation, and asset roadmap",
+    "status": "done",
+    "type": "planning",
+    "notes": "Added implementation-ready specs for Normal/Hard modes, off-course helper, orbit focus presentation, sprite assets, procedural planet visuals, result test helper, title screen, mobile boundaries, and post-GRC009 task order."
+  },
+  {
+    "id": "GRC009",
+    "title": "Implement final goal and result screen",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented an Earth-like final goal separate from normal planets, compact Journey Progress UI with PLANET current/35 and a goal progress bar, optional NEXT SUPPLY hint, goal arrival detection, final score, crew bonus, result state, result screen, crew count display, density-based crew/crowd rendering, staggered celebration, and rank display."
+  },
+  {
+    "id": "GRC009A",
+    "title": "Add result-screen test helper",
+    "status": "done",
+    "type": "development-tooling",
+    "notes": "Added a DEBUG/DEMO-only bottom-right GOAL TEST button and G-key fallback, cycling crew presets 12/50/51/200/201/635, deterministic crew distribution, test score/resources, safe pre-goal placement, and normal goal-to-result transition coverage for Normal and Hard."
+  },
+  {
+    "id": "GRC009F",
+    "title": "Add Normal and Hard course modes",
+    "status": "done",
+    "type": "gameplay",
+    "notes": "Implemented Normal mode with 20 planets and 4 appearances per normal type, Hard mode with 35 planets and 7 appearances per normal type, shared rules, mode-specific rank thresholds, selected mode in result summary, and temporary N-key mode toggling before title-screen selection."
+  },
+  {
+    "id": "GRC009B",
+    "title": "Add orbit focus presentation",
+    "status": "done",
+    "type": "presentation",
+    "notes": "Added orbit focus strength, restrained world-camera zoom capped at 1.12, midpoint camera focus, deterministic screen-space concentration lines, cut-in attenuation, smooth Transfer Boost release, and tests without adding screen shake or changing orbit physics."
+  },
+  {
+    "id": "GRC009C",
+    "title": "Add off-course recovery helper",
+    "status": "done",
+    "type": "navigation",
+    "notes": "Added next-course-target off-course detection, screen-edge NEXT/GOAL arrow, distance display, debug state, safe HUD placement, and tests without altering physics."
+  },
+  {
+    "id": "GRC009D",
+    "title": "Enrich procedural planet visuals",
+    "status": "done",
+    "type": "presentation",
+    "notes": "Added layered planet rendering with type-specific Wind/Iron/Water/Forest/Rock/Black Hole surfaces, atmosphere rings, sparse particles, deterministic animation, and tests without changing physics or collision behavior."
+  },
+  {
+    "id": "GRC009E1",
+    "title": "Integrate first Hero sprite from Pyxel resource",
+    "status": "done",
+    "type": "assets",
+    "notes": "Integrated the developer-authored 32x32 Hero sprite and five resident idle sprites from assets/gravity_courier.pyxres, mapped them to image bank 0 with palette color 14 as transparent, rendered ready sprites where applicable, and kept missing-resource and unready-stage fallbacks."
+  },
+  {
+    "id": "GRC009E",
+    "title": "Complete resident and Hero sprite integration",
+    "status": "done",
+    "type": "assets",
+    "notes": "Added resident/Hero sprite readiness inventories, per-planet resident stage readiness, Hero state readiness, fallback behavior for unready cheer/result cells, atlas documentation, and tests. Rocket sprite integration was already handled separately and is not part of this remaining scope."
+  },
+  {
+    "id": "GRC010",
+    "title": "Mobile/touch readiness pass",
+    "status": "done",
+    "type": "mobile",
+    "notes": "Implemented shared ControlIntent input for keyboard and touch, screen-space horizontal drag steering with high-speed assist and clamped response, upward/downward gentle thrust/brake swipe pulses, always-on trajectory preview, and mobile-oriented HUD control hints while preserving keyboard support."
+  },
+  {
+    "id": "GRC009G",
+    "title": "Add gameplay audio manager and stage sounds",
+    "status": "done",
+    "type": "audio",
+    "notes": "Added a fallback-safe AudioManager, layered title BGM with low accompaniment and high music-box harmony, thin looping cruise BGM, staged lap sounds, transfer boost, supply, damage, crash, and result sounds, plus an S-key/title SOUND toggle."
+  },
+  {
+    "id": "GRC010A",
+    "title": "Implement title screen and mode selection",
+    "status": "done",
+    "type": "flow",
+    "notes": "Implemented title state, START, Normal/Hard selection, DEMO entry, SOUND toggle, concise touch/keyboard guidance, and title-safe audio behavior."
+  },
+  {
+    "id": "GRC011",
+    "title": "Polish and release candidate prototype",
+    "status": "todo",
+    "type": "polish",
+    "notes": "Improve visual polish, sound effects if appropriate, feedback, retry loop, title/game over flow, and high score persistence if appropriate."
+  }
+]

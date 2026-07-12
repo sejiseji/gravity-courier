@@ -3,7 +3,7 @@ from collections import Counter
 
 import _path  # noqa: F401
 
-from gravity_courier.constants import PLANET_X_MAX, PLANET_X_MIN
+from gravity_courier.constants import PLANET_BASE_SPACING_Y, PLANET_SPACING_Y_GROWTH, PLANET_X_MAX, PLANET_X_MIN
 from gravity_courier.course import (
     COURSE_MODE_HARD,
     COURSE_MODE_NORMAL,
@@ -71,6 +71,17 @@ class CoursePlacementTest(unittest.TestCase):
         self.assertEqual(len(set(range(len(course.planets)))), len(course.planets))
         self.assertTrue(all(PLANET_X_MIN <= planet.position.x <= PLANET_X_MAX for planet in course.planets))
         self.assertTrue(all(next_y < current_y for current_y, next_y in zip(ys, ys[1:])))
+
+    def test_vertical_planet_spacing_uses_expanded_course_gap(self) -> None:
+        course = generate_course()
+        gaps = [
+            current.position.y - next_planet.position.y
+            for current, next_planet in zip(course.planets, course.planets[1:])
+        ]
+
+        self.assertTrue(all(gap >= PLANET_BASE_SPACING_Y for gap in gaps))
+        self.assertAlmostEqual(gaps[0], PLANET_BASE_SPACING_Y + PLANET_SPACING_Y_GROWTH)
+        self.assertGreater(gaps[-1], gaps[0])
 
     def test_gap_metadata_references_valid_planet_ids(self) -> None:
         course = generate_course()

@@ -14,6 +14,7 @@ from gravity_courier.residents import (
     CHEER_STAGES,
     RESIDENTS_BY_PLANET_TYPE,
     SPRITE_STAGES,
+    STAGE_LABELS,
     resident_for_planet_type,
     stage_for_lap,
 )
@@ -72,6 +73,17 @@ class ResidentRegistryTest(unittest.TestCase):
 
             for stage in SPRITE_STAGES:
                 self.assertEqual(resident.stage_sprites[stage], idle)
+
+    def test_stage_labels_cover_sprite_inventory_states(self) -> None:
+        self.assertEqual(
+            {stage: STAGE_LABELS[stage] for stage in SPRITE_STAGES},
+            {
+                0: "idle",
+                1: "cheer1",
+                2: "cheer2",
+                3: "cheer3",
+            },
+        )
 
     def test_lap_three_and_beyond_maps_to_stage_three(self) -> None:
         self.assertEqual(stage_for_lap(1), 1)

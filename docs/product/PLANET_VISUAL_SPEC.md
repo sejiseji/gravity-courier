@@ -124,3 +124,12 @@ Gameplay readability:
 - Do not replace resident sprites.
 - Do not alter planet reward behavior.
 - Do not change collision radius based on decorative shapes.
+
+## Implementation Status
+
+GRC009D implements this as lightweight procedural drawing in `app.py`.
+
+- Planet drawing is split into base, surface, atmosphere, and sparse particle layers.
+- `PLANET_RENDERERS` dispatches Wind, Iron, Water, Forest, Rock, and Black Hole to type-specific renderers.
+- Animation uses deterministic frame phases and planet indices rather than random per-frame noise.
+- Collision radius, gravity wells, rewards, labels, and lap display remain unchanged.

@@ -64,7 +64,7 @@ GRC005 art direction:
 Reserved resource path:
 
 ```text
-assets/gravity_courier.pyxres
+prototypes/gravity_courier/assets/gravity_courier.pyxres
 ```
 
 First implementation should be resource-backed but fallback-safe. Primitive portraits are a fallback, not the preferred long-term representation.
@@ -73,12 +73,12 @@ Current sprite sheet layout in image bank 0:
 
 | Row | v | Character | Columns |
 | --- | --- | --- | --- |
-| 0 | 0 | Hero | idle; cheer/result reuse idle until authored |
-| 1 | 32 | Wind resident | idle; cheer stages reuse idle until authored |
-| 2 | 64 | Iron resident | idle; cheer stages reuse idle until authored |
-| 3 | 96 | Water resident | idle; cheer stages reuse idle until authored |
-| 4 | 128 | Forest resident | idle; cheer stages reuse idle until authored |
-| 5 | 160 | Rock resident | idle; cheer stages reuse idle until authored |
+| 0 | 0 | Hero | idle ready; cheer/result fallback until authored |
+| 1 | 32 | Wind resident | idle ready; cheer stages fallback until authored |
+| 2 | 64 | Iron resident | idle ready; cheer stages fallback until authored |
+| 3 | 96 | Water resident | idle ready; cheer stages fallback until authored |
+| 4 | 128 | Forest resident | idle ready; cheer stages fallback until authored |
+| 5 | 160 | Rock resident | idle ready; cheer stages fallback until authored |
 
 Column meaning:
 - `u=0`: idle/normal.
@@ -86,7 +86,7 @@ Column meaning:
 - `u=64`: cheer stage 2.
 - `u=96`: cheer stage 3.
 
-Hero source is image bank 0, `(u=0, v=0)`, `32x32`, with palette color `14` as the transparent key. Resident rows use the same transparent key, and the first resident idle sprites are enabled for cut-ins and crew UI.
+Hero source is image bank 0, `(u=0, v=0)`, `32x32`, with palette color `14` as the transparent key. Resident rows use the same transparent key. Runtime readiness is tracked per Hero state and per resident stage, so unfinished cheer/result cells fall back to primitives instead of being treated as finished sprites.
 
 Sprite metadata should live in a resident registry, for example `residents.py`, with:
 - `image_bank`.

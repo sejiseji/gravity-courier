@@ -1,0 +1,77 @@
+# Goal State
+
+- Current goal: `GRC010A Implement title screen and mode selection`
+- Status: implemented
+- Next recommended implementation goal: `GRC011 Polish and release candidate prototype`
+
+## Notes
+
+- GRC008 validation passes.
+- The fixed target profile remains `iphone16_large`, `393x852`.
+- Lap completion is now based on signed angular progress inside a planet gravity well.
+- Completed laps now trigger score, lap labels, cheer feedback, resident cut-ins, and lap 2 rewards.
+- Transfer Boost is now an exit event after at least one completed lap in the current planet visit.
+- Cut-ins now slide in near screen middle from the side opposite the assisting planet.
+- Added `SUPPLY_CREW_GOAL_RESULT_SPEC.md` for delayed supply ships, crew growth, finite course generation, final goal, result scoring, and crew celebration.
+- GRC006 added floating asteroids, crossing rockets, and normal supply items.
+- Normal supply items add score and fuel only; they do not add crew.
+- Floating asteroids and crossing rockets use the shield/HP damage model.
+- Interplanet object placement is deterministic and now uses course gap data where practical.
+- GRC007 added lap 3 supply ship reservations, delayed supply ship readiness, supply cargo, crew growth, and compact in-run crew UI.
+- Supply ship delay still uses Transfer Boost exits, and ready reservations now wait in current/next SUPPLY ZONE lanes by planet type until collected.
+- Supply cargo adds score, fuel, and planet-type crew.
+- Crew joins use `[1, 2, 4, 8, 16, 32, 64]` per planet type.
+- Waiting supply cargo advances crew success tier only on collection.
+- GRC008 added finite 35-planet shuffle-bag course generation with 7 appearances per normal planet type.
+- GRC008 added course gap metadata, supply gap marking, deterministic difficulty helpers, and crossing meteor swarms.
+- Supply ship reservations can now target future course gaps while retaining the Transfer Boost countdown.
+- GRC010 implemented shared `ControlIntent` input for keyboard and touch.
+- Mobile/touch input uses screen-space horizontal drag for clamped steering with high-speed assist, upward swipes for gentle thrust pulses, downward swipes for gentle brake pulses, and always-on trajectory preview.
+- GRC009G added a fallback-safe `AudioManager`, layered title BGM with low accompaniment and high music-box harmony, thin looping cruise BGM, gentle looping result BGM, orbit-entry cue, staged lap sounds, Transfer Boost, supply, damage, crash, and result sounds.
+- `S` toggles sound on/off as a temporary bridge before title-screen SOUND controls.
+- GRC010A added a launch title state with START, Normal/Hard mode selection, DEMO entry, SOUND toggle, and concise keyboard/touch guidance.
+- Title mode selection updates the selected mode without rebuilding the active course until START/DEMO begins a run.
+- Title screen uses layered title audio; gameplay BGM starts from START, DEMO, retry, or restart into play.
+- GRC009 implemented Journey Progress, the Earth-like final goal, and result screen.
+- Journey Progress shows compact zero-based planet progress toward `GOAL`, with optional small supply hints.
+- Final goal is separate from normal planets and is not part of gravity, lap, reward, or supply-ship planet logic.
+- Result state is separate from crash/lost state.
+- Result screen shows final score, run score, crew bonus, crew count, laps, supply cargo count, HP, fuel, rank, shimmer title text, and density-based staggered crew celebration.
+- GRC009P added post-goal specs for Normal/Hard modes, off-course guidance, orbit focus presentation, sprite assets, procedural planet visuals, result testing, title screen, and future task order.
+- GRC009F implemented Normal and Hard course modes.
+- Normal is now the default course: 20 planets, 4 appearances per normal planet type.
+- Hard preserves the long course: 35 planets, 7 appearances per normal planet type.
+- `N` toggles Normal/Hard before the future title screen mode selector.
+- Result summaries carry the selected course mode and use mode-specific rank thresholds.
+- GRC009A implemented a DEBUG/DEMO-only `GOAL TEST` result helper.
+- `GOAL TEST` cycles deterministic joined-crew presets `12/50/51/200/201/635`.
+- Result-test crew is distributed in stable Wind, Iron, Water, Forest, Rock order.
+- The result helper assigns test score/resources, places the rocket just before the final goal, and relies on normal goal arrival to enter result state.
+- `G` is a debug/demo-only keyboard fallback for the `GOAL TEST` helper.
+- GRC009B implemented restrained orbit focus presentation.
+- Orbit focus starts after meaningful orbit progress, grows with current lap progress and completed laps, and caps world-camera zoom at `1.12`.
+- During orbit focus, the camera follow target blends slightly toward the rocket/planet midpoint.
+- Deterministic concentration lines are drawn in screen space under HUD/cut-ins.
+- Active cut-ins attenuate orbit focus, and Transfer Boost releases focus smoothly without screen shake.
+- GRC009C implemented off-course recovery guidance.
+- The helper targets the next expected course planet or final goal, never just the nearest planet.
+- The helper activates when the target is off screen, the route distance is large, progress stalls, or the rocket is moving away.
+- The helper draws a safe-area screen-edge `NEXT`/`GOAL` arrow with distance while leaving physics untouched.
+- GRC009D implemented layered procedural planet visuals.
+- Planet rendering now has base, surface, atmosphere, and sparse particle layers.
+- Wind, Iron, Water, Forest, Rock, and Black Hole each dispatch through type-specific renderer methods.
+- Visual animation is deterministic and lightweight, and collision radius, gravity, rewards, labels, and lap display remain unchanged.
+- `assets/gravity_courier.pyxres` now contains the first developer-authored Hero sprite and five normal resident idle sprites.
+- Hero uses image bank 0, `(u=0, v=0)`, `32x32`, with transparent color key `14`.
+- Resident idle sprites use image bank 0 at `u=0`, rows `v=32..160`, with transparent color key `14`.
+- Loading the `.pyxres` enables Hero idle and the first resident idle sprites; resident cheer stages fall back until dedicated expressions are authored.
+- Resident sprite readiness is tracked per planet type and stage, so newly drawn cells can be enabled one by one.
+- Hero readiness is tracked per state; only `idle` is currently ready, while `cheer` and `result` remain fallback states.
+- Resident atlas rows now start below Hero: Wind `v=32`, Iron `v=64`, Water `v=96`, Forest `v=128`, Rock `v=160`.
+- The in-run crew UI now uses a full-width lower HUD strip instead of a compact right-side card, with Hero plus all five type counters visible.
+- The crew UI Hero now jumps with small confetti on positive events: completed gravity-assist laps, supply cargo crew joins, normal supply recovery, and Transfer Boost exits.
+- Ready supply ship reservations now keep stationary supply ships queued in SUPPLY ZONE by planet type, improving DEMO and normal collection reliability.
+- The resident cut-in card height is compacted from `144` to `120` px while keeping the portrait and text readable.
+- Resident registry entries include `32x32` sprite metadata for Wind, Iron, Water, Forest, and Rock.
+- Missing `.pyxres` resources fall back to primitive portraits.
+- Final resident art remains future work.

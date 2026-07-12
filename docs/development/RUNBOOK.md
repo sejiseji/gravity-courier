@@ -3,7 +3,7 @@
 ## Run The Prototype
 
 ```bash
-python3 main.py
+python3 prototypes/gravity_courier/main.py
 ```
 
 Pyxel must be installed for this command to open the `393x852` game window.
@@ -13,37 +13,42 @@ For Homebrew-managed Python environments that block system installs, run through
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install pyxel
-.venv/bin/python main.py
+.venv/bin/python prototypes/gravity_courier/main.py
 ```
 
 ## Controls
 
 Current desktop prototype controls:
 
+- Title START / Z / Enter: start selected mode
+- Title MODE / Left / Right: switch Normal/Hard mode
+- Title DEMO / M: start demo run
+- Title SOUND / S: toggle sound
 - Left / Right: steer left/right relative to the current travel direction
 - Up: boost along the current travel direction and consume fuel
 - Down: brake by damping velocity
-- Space: toggle trajectory preview
+- Space: desktop preview flag toggle, though gameplay preview is currently always visible
 - M or top-right `DEMO` button: toggle demo mode
 - R: restart
 - D: toggle debug HUD
+- S: toggle sound
 - Escape: quit
 
-Planned mobile controls are documented in `docs/product/MOBILE_CONTROL_SPEC.md`. Mobile gameplay should keep trajectory preview always visible, use horizontal drag for continuous rotation, use upward/downward swipes for gentle thrust/brake pulses, and leave tap reserved for future actions.
+Mobile/touch controls use horizontal drag for continuous steering, upward swipes for gentle thrust pulses, and downward swipes for gentle brake pulses. Tap remains reserved for future actions.
 
 ## Validation
 
 ```bash
-python3 -m compileall main.py src tests scripts
-python3 scripts/check_all.py
-python3 -m unittest discover tests
+python3 -m compileall prototypes/gravity_courier
+python3 prototypes/gravity_courier/scripts/check_all.py
+python3 -m unittest discover prototypes/gravity_courier/tests
 git diff --check
 ```
 
 `scripts/check_all.py` uses `pytest` if it is installed. Otherwise it runs:
 
 ```bash
-python3 -m unittest discover tests
+python3 -m unittest discover prototypes/gravity_courier/tests
 ```
 
 Docs-only planning tasks such as GRC009P do not require manual Pyxel launch, but they should still run the validation commands above and `git diff --check`.
@@ -64,6 +69,12 @@ Post-GRC009 planning specs live under `docs/product/`:
 ## Manual QA Checklist
 
 - Window opens at `393x852`.
+- Title screen appears before gameplay.
+- Title screen plays layered title BGM with low accompaniment and high music-box harmony when sound is on.
+- START begins Normal by default.
+- MODE or Left/Right switches Normal/Hard before START.
+- DEMO starts the same demo autopilot from the title screen.
+- SOUND toggles layered title audio without starting gameplay BGM while still on the title screen.
 - Rocket appears below screen center.
 - Left / Right relative steering bends the current travel direction.
 - Up boost follows the current travel direction and shows flame.
