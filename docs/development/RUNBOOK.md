@@ -55,13 +55,15 @@ Docs-only planning tasks such as GRC009P do not require manual Pyxel launch, but
 
 ## Web Publish HTML Patch
 
+`index.html` at the Gravity Courier project root is the local source of truth for the published GitHub Pages wrapper. Keep it in sync with the public `sejiseji/gravity-courier` repository instead of treating the generated public-worktree file as an untracked one-off artifact.
+
 Pyxel `app2html` creates a minimal web wrapper. Before publishing the generated HTML, run the Gravity Courier patch step so the page uses the visible Safari viewport instead of the taller layout viewport:
 
 ```bash
-python3 prototypes/gravity_courier/scripts/patch_web_html.py generated.html index.html
+python3 prototypes/gravity_courier/scripts/patch_web_html.py generated.html prototypes/gravity_courier/index.html
 ```
 
-The patch also renames the embedded app to `gravity-courier-public.pyxapp` and disables the web gamepad overlay.
+The patch also renames the embedded app to `gravity-courier-public.pyxapp` and disables the web gamepad overlay. When deploying, copy this local `index.html` to the public repository root together with the current source files.
 
 ## Planning Specs
 

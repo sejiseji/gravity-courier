@@ -8,6 +8,7 @@ import unittest
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "patch_web_html.py"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("patch_web_html", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 patch_web_html = importlib.util.module_from_spec(SPEC)
@@ -48,6 +49,26 @@ class WebPublishTests(unittest.TestCase):
 
         self.assertEqual(patched_once, patched_twice)
         self.assertEqual(patched_twice.count(patch_web_html.PATCH_MARKER), 1)
+
+    def test_local_index_html_is_publishable_source_of_truth(self) -> None:
+        html = (PROJECT_ROOT / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn(patch_web_html.PATCH_MARKER, html)
+        self.assertIn("window.visualViewport", html)
+        self.assertIn('name: "gravity-courier-public.pyxapp"', html)
+        self.assertIn('gamepad: "disabled"', html)
+        forbidden_fragments = (
+            "/Users/",
+            "toytoytoy330",
+            "Desktop/AllMyFiles",
+            "/private/",
+            "TemporaryItems",
+            "NSIRD",
+            ".codex",
+        )
+        for fragment in forbidden_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertNotIn(fragment, html)
 
 
 if __name__ == "__main__":
