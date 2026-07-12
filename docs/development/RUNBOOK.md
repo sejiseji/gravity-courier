@@ -53,6 +53,16 @@ python3 -m unittest discover prototypes/gravity_courier/tests
 
 Docs-only planning tasks such as GRC009P do not require manual Pyxel launch, but they should still run the validation commands above and `git diff --check`.
 
+## Web Publish HTML Patch
+
+Pyxel `app2html` creates a minimal web wrapper. Before publishing the generated HTML, run the Gravity Courier patch step so the page uses the visible Safari viewport instead of the taller layout viewport:
+
+```bash
+python3 prototypes/gravity_courier/scripts/patch_web_html.py generated.html index.html
+```
+
+The patch also renames the embedded app to `gravity-courier-public.pyxapp` and disables the web gamepad overlay.
+
 ## Planning Specs
 
 Post-GRC009 planning specs live under `docs/product/`:
