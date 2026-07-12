@@ -12,7 +12,10 @@ from gravity_courier.app import (
     STATE_CRASHED,
     STATE_PLAYING,
     STATE_RESULT,
+    goal_test_action_rect,
     goal_test_button_rect,
+    goal_test_left_arrow_rect,
+    goal_test_right_arrow_rect,
     result_retry_hard_button_rect,
     result_retry_button_rect,
     result_title_button_rect,
@@ -64,6 +67,9 @@ class RecordingPyxel:
 
     def rectb(self, *args: int) -> None:
         self.calls.append(("rectb", args))
+
+    def tri(self, *args: int) -> None:
+        self.calls.append(("tri", args))
 
     def circ(self, *args: int) -> None:
         self.calls.append(("circ", args))
@@ -338,17 +344,10 @@ class AppGoalResultTest(unittest.TestCase):
         self.assertEqual(app.result_summary.course_mode_key, COURSE_MODE_HARD)
         self.assertEqual(app.result_summary.joined_crew_count, RESULT_TEST_CREW_PRESETS[1])
 
-    def test_goal_test_keyboard_shortcut_only_cycles_preset_when_available(self) -> None:
+    def test_goal_test_keyboard_shortcut_cycles_preset_during_play(self) -> None:
         app = GravityCourierApp()
         app.pyxel = UpdatePyxel(pressed_key=UpdatePyxel.KEY_G)
 
-        app.update()
-
-        self.assertEqual(app.game_state, STATE_PLAYING)
-        self.assertEqual(total_joined_crew(app.crew_count_by_type), 0)
-        self.assertEqual(app.result_test_preset_index, 0)
-
-        app.show_debug = True
         app.update()
 
         self.assertEqual(app.result_test_preset_index, 1)
@@ -358,9 +357,8 @@ class AppGoalResultTest(unittest.TestCase):
 
     def test_goal_test_button_click_executes_selected_preset(self) -> None:
         app = GravityCourierApp()
-        app.show_debug = True
         app._cycle_goal_test_preset()
-        x, y, width, height = goal_test_button_rect()
+        x, y, width, height = goal_test_action_rect()
         pyxel = UpdatePyxel(pressed_key=UpdatePyxel.MOUSE_BUTTON_LEFT)
         pyxel.mouse_x = x + width // 2
         pyxel.mouse_y = y + height // 2
@@ -373,9 +371,44 @@ class AppGoalResultTest(unittest.TestCase):
         self.assertEqual(app.game_state, STATE_PLAYING)
         self.assertFalse(reached_final_goal(app.rocket.position, app.final_goal))
 
-    def test_goal_test_enter_executes_selected_preset_in_debug(self) -> None:
+    def test_goal_test_button_draws_triangle_arrows(self) -> None:
         app = GravityCourierApp()
-        app.show_debug = True
+        pyxel = RecordingPyxel()
+        app.pyxel = pyxel
+        text_records: list[str] = []
+        app._draw_text_scaled = (  # type: ignore[method-assign]
+            lambda _x, _y, text, _color, scale=2: text_records.append(text)
+        )
+
+        app._draw_goal_test_button()
+
+        triangle_calls = [args for name, args in pyxel.calls if name == "tri"]
+        self.assertEqual(len(triangle_calls), 2)
+        self.assertNotIn("<", text_records)
+        self.assertNotIn(">", text_records)
+        self.assertIn("GOAL", text_records)
+        self.assertIn("TEST", text_records)
+
+    def test_goal_test_button_click_executes_in_demo_without_debug(self) -> None:
+        app = GravityCourierApp()
+        app.demo_mode = True
+        app._cycle_goal_test_preset()
+        x, y, width, height = goal_test_action_rect()
+        pyxel = UpdatePyxel(pressed_key=UpdatePyxel.MOUSE_BUTTON_LEFT)
+        pyxel.mouse_x = x + width // 2
+        pyxel.mouse_y = y + height // 2
+        app.pyxel = pyxel
+
+        app.update()
+
+        self.assertEqual(app.last_result_test_crew_count, RESULT_TEST_CREW_PRESETS[1])
+        self.assertEqual(total_joined_crew(app.crew_count_by_type), RESULT_TEST_CREW_PRESETS[1])
+        self.assertEqual(app.result_test_preset_index, 1)
+        self.assertFalse(app.demo_mode)
+        self.assertFalse(reached_final_goal(app.rocket.position, app.final_goal))
+
+    def test_goal_test_enter_executes_selected_preset_without_debug(self) -> None:
+        app = GravityCourierApp()
         app._cycle_goal_test_preset()
         app.pyxel = UpdatePyxel(pressed_key=UpdatePyxel.KEY_ENTER)
 
@@ -384,10 +417,9 @@ class AppGoalResultTest(unittest.TestCase):
         self.assertEqual(app.last_result_test_crew_count, RESULT_TEST_CREW_PRESETS[1])
         self.assertEqual(total_joined_crew(app.crew_count_by_type), RESULT_TEST_CREW_PRESETS[1])
 
-    def test_demo_goal_test_button_click_cycles_without_executing(self) -> None:
+    def test_goal_test_right_arrow_click_cycles_without_executing(self) -> None:
         app = GravityCourierApp()
-        app.demo_mode = True
-        x, y, width, height = goal_test_button_rect()
+        x, y, width, height = goal_test_right_arrow_rect()
         pyxel = UpdatePyxel(pressed_key=UpdatePyxel.MOUSE_BUTTON_LEFT)
         pyxel.mouse_x = x + width // 2
         pyxel.mouse_y = y + height // 2
@@ -400,14 +432,17 @@ class AppGoalResultTest(unittest.TestCase):
         self.assertEqual(total_joined_crew(app.crew_count_by_type), 0)
         self.assertEqual(app.game_state, STATE_PLAYING)
 
-    def test_demo_goal_test_enter_cycles_without_executing(self) -> None:
+    def test_goal_test_left_arrow_click_cycles_backward_without_executing(self) -> None:
         app = GravityCourierApp()
-        app.demo_mode = True
-        app.pyxel = UpdatePyxel(pressed_key=UpdatePyxel.KEY_ENTER)
+        x, y, width, height = goal_test_left_arrow_rect()
+        pyxel = UpdatePyxel(pressed_key=UpdatePyxel.MOUSE_BUTTON_LEFT)
+        pyxel.mouse_x = x + width // 2
+        pyxel.mouse_y = y + height // 2
+        app.pyxel = pyxel
 
         app.update()
 
-        self.assertEqual(app.result_test_preset_index, 1)
+        self.assertEqual(app.result_test_preset_index, len(RESULT_TEST_CREW_PRESETS) - 1)
         self.assertEqual(app.last_result_test_crew_count, 0)
         self.assertEqual(total_joined_crew(app.crew_count_by_type), 0)
 

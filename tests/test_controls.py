@@ -14,7 +14,10 @@ from gravity_courier.app import (
     TITLE_MENU_START,
     TouchControlState,
     demo_button_rect,
+    goal_test_action_rect,
     goal_test_button_rect,
+    goal_test_left_arrow_rect,
+    goal_test_right_arrow_rect,
     heading_from_velocity,
     point_in_rect,
     result_retry_hard_button_rect,
@@ -534,17 +537,33 @@ class RelativeControlTest(unittest.TestCase):
         self.assertLessEqual(x + width, WIDTH)
         self.assertLessEqual(y + height, HEIGHT)
 
-    def test_goal_test_button_requires_debug_or_demo_availability(self) -> None:
+    def test_goal_test_button_is_available_during_playing_independent_of_debug(self) -> None:
         app = GravityCourierApp()
         x, y, width, height = goal_test_button_rect()
         click = FakePyxelMouse(x + width // 2, y + height // 2, pressed=True)
 
-        self.assertFalse(app._goal_test_available())
+        self.assertTrue(app._goal_test_available())
         self.assertTrue(app._goal_test_button_pressed(click))
 
-        app.show_debug = True
+        app.game_state = STATE_TITLE
 
-        self.assertTrue(app._goal_test_available())
+        self.assertFalse(app._goal_test_available())
+
+    def test_goal_test_click_regions_split_action_and_arrows(self) -> None:
+        app = GravityCourierApp()
+        action_x, action_y, action_width, action_height = goal_test_action_rect()
+        left_x, left_y, left_width, left_height = goal_test_left_arrow_rect()
+        right_x, right_y, right_width, right_height = goal_test_right_arrow_rect()
+
+        action = FakePyxelMouse(action_x + action_width // 2, action_y + action_height // 2, pressed=True)
+        left = FakePyxelMouse(left_x + left_width // 2, left_y + left_height // 2, pressed=True)
+        right = FakePyxelMouse(right_x + right_width // 2, right_y + right_height // 2, pressed=True)
+
+        self.assertTrue(app._goal_test_button_pressed(action))
+        self.assertFalse(app._goal_test_button_pressed(left))
+        self.assertFalse(app._goal_test_button_pressed(right))
+        self.assertTrue(app._goal_test_left_arrow_pressed(left))
+        self.assertTrue(app._goal_test_right_arrow_pressed(right))
 
     def test_n_key_toggles_course_mode_and_restarts_course(self) -> None:
         app = GravityCourierApp()

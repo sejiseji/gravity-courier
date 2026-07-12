@@ -262,6 +262,7 @@ PLANET_RENDERERS = {
 }
 GOAL_TEST_BUTTON_WIDTH = 106
 GOAL_TEST_BUTTON_HEIGHT = 32
+GOAL_TEST_ARROW_WIDTH = 24
 TITLE_BUTTON_WIDTH = 236
 TITLE_BUTTON_HEIGHT = 42
 TITLE_BUTTON_GAP = 16
@@ -294,6 +295,21 @@ def goal_test_button_rect() -> tuple[int, int, int, int]:
         GOAL_TEST_BUTTON_WIDTH,
         GOAL_TEST_BUTTON_HEIGHT,
     )
+
+
+def goal_test_left_arrow_rect() -> tuple[int, int, int, int]:
+    x, y, _width, height = goal_test_button_rect()
+    return (x, y, GOAL_TEST_ARROW_WIDTH, height)
+
+
+def goal_test_right_arrow_rect() -> tuple[int, int, int, int]:
+    x, y, width, height = goal_test_button_rect()
+    return (x + width - GOAL_TEST_ARROW_WIDTH, y, GOAL_TEST_ARROW_WIDTH, height)
+
+
+def goal_test_action_rect() -> tuple[int, int, int, int]:
+    x, y, width, height = goal_test_button_rect()
+    return (x + GOAL_TEST_ARROW_WIDTH, y, width - GOAL_TEST_ARROW_WIDTH * 2, height)
 
 
 @dataclass(frozen=True)
@@ -898,12 +914,12 @@ class GravityCourierApp:
             if goal_test_key_pressed:
                 self._cycle_goal_test_preset()
                 return
-            if self.demo_mode:
-                if goal_test_enter_pressed or self._goal_test_button_pressed(pyxel) or self._goal_test_button_flicked(pyxel):
-                    self._cycle_goal_test_preset()
-                    return
-            else:
-                self._reset_goal_test_flick()
+            if self._goal_test_left_arrow_pressed(pyxel):
+                self._change_goal_test_preset(-1)
+                return
+            if self._goal_test_right_arrow_pressed(pyxel) or self._goal_test_button_flicked(pyxel):
+                self._change_goal_test_preset(1)
+                return
             if goal_test_enter_pressed or self._goal_test_button_pressed(pyxel):
                 self._activate_goal_test()
                 return
@@ -1252,15 +1268,24 @@ class GravityCourierApp:
         return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), result_title_button_rect())
 
     def _goal_test_available(self) -> bool:
-        return self.game_state == STATE_PLAYING and (self.show_debug or self.demo_mode)
+        return self.game_state == STATE_PLAYING
 
     def _goal_test_button_pressed(self, pyxel: Any) -> bool:
+        return self._goal_test_rect_pressed(pyxel, goal_test_action_rect())
+
+    def _goal_test_left_arrow_pressed(self, pyxel: Any) -> bool:
+        return self._goal_test_rect_pressed(pyxel, goal_test_left_arrow_rect())
+
+    def _goal_test_right_arrow_pressed(self, pyxel: Any) -> bool:
+        return self._goal_test_rect_pressed(pyxel, goal_test_right_arrow_rect())
+
+    def _goal_test_rect_pressed(self, pyxel: Any, rect: tuple[int, int, int, int]) -> bool:
         mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
         if mouse_button is None:
             return False
         if not pyxel.btnp(mouse_button):
             return False
-        return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), goal_test_button_rect())
+        return point_in_rect(int(pyxel.mouse_x), int(pyxel.mouse_y), rect)
 
     def _goal_test_button_flicked(self, pyxel: Any) -> bool:
         mouse_button = getattr(pyxel, "MOUSE_BUTTON_LEFT", None)
@@ -1290,7 +1315,10 @@ class GravityCourierApp:
         self.goal_test_flick_last_x = 0.0
 
     def _cycle_goal_test_preset(self) -> None:
-        self.result_test_preset_index = (self.result_test_preset_index + 1) % len(RESULT_TEST_CREW_PRESETS)
+        self._change_goal_test_preset(1)
+
+    def _change_goal_test_preset(self, delta: int) -> None:
+        self.result_test_preset_index = (self.result_test_preset_index + delta) % len(RESULT_TEST_CREW_PRESETS)
         self.cheer_text = "GOAL TEST"
         self.last_score_gain = RESULT_TEST_CREW_PRESETS[self.result_test_preset_index]
         self.message_timer = ASSIST_MESSAGE_FRAMES
@@ -3540,12 +3568,30 @@ class GravityCourierApp:
         crew_count = RESULT_TEST_CREW_PRESETS[self.result_test_preset_index]
         pyxel.rect(x, y, width, height, 1)
         pyxel.rectb(x, y, width, height, COLOR_ALERT)
-        label = "GOAL TEST"
-        text_x = x + (width - self._scaled_text_width(label, 2)) // 2
-        self._draw_text_scaled(text_x, y + 5, label, COLOR_ALERT, scale=2)
+        left_x, _left_y, left_width, _left_height = goal_test_left_arrow_rect()
+        right_x, _right_y, right_width, _right_height = goal_test_right_arrow_rect()
+        pyxel.line(x + left_width, y + 3, x + left_width, y + height - 4, COLOR_GRAVITY_WELL)
+        pyxel.line(right_x, y + 3, right_x, y + height - 4, COLOR_GRAVITY_WELL)
+        arrow_y = y + 12
+        pyxel.tri(left_x + 7, arrow_y, left_x + 16, arrow_y - 6, left_x + 16, arrow_y + 6, COLOR_ALERT)
+        pyxel.tri(
+            right_x + right_width - 7,
+            arrow_y,
+            right_x + right_width - 16,
+            arrow_y - 6,
+            right_x + right_width - 16,
+            arrow_y + 6,
+            COLOR_ALERT,
+        )
+        goal_label = "GOAL"
+        goal_x = x + (width - self._scaled_text_width(goal_label, 2)) // 2
+        self._draw_text_scaled(goal_x, y + 4, goal_label, COLOR_ALERT, scale=2)
+        test_label = "TEST"
+        test_x = x + (width - self._scaled_text_width(test_label, 1)) // 2
+        self._draw_text_scaled(test_x, y + 18, test_label, COLOR_HUD, scale=1)
         crew_label = f"CREW {crew_count}"
         crew_x = x + (width - self._scaled_text_width(crew_label, 1)) // 2
-        self._draw_text_scaled(crew_x, y + 22, crew_label, COLOR_HUD, scale=1)
+        self._draw_text_scaled(crew_x, y + 25, crew_label, COLOR_HUD, scale=1)
 
     def _draw_title_screen(self) -> None:
         pyxel = self.pyxel
