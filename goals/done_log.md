@@ -326,3 +326,16 @@
 - Plays layered title audio while waiting, then starts gameplay BGM on START, DEMO, retry, or restart into play.
 - Added concise title guidance for drag steering, swipe speed control, keyboard mode selection, and demo start.
 - Added tests for title button layout, mode selection, start/demo entry, and title-safe sound toggling.
+
+## GRC011A
+
+- Added DEBUG timing readouts for starfield, trajectory prediction, planet drawing, object drawing, and DEMO AI sections.
+- Cached trajectory preview points and recalculated them every 2 frames instead of every draw frame.
+- Reduced gameplay starfield draw work with a stride while preserving the full title-screen starfield.
+- Reduced orbit focus concentration-line count from 12-24 to 8-16.
+- Added planet draw LOD so gravity rings can remain visible while far/offscreen body details are skipped.
+- Cached deterministic planet pattern points by planet, slot, and rendered radius.
+- Reduced result-screen and crew-UI confetti particle counts.
+- Cached non-orbit DEMO navigation decisions for short intervals.
+- Replaced hot collision/range checks with squared-distance comparisons where exact distance was not needed.
+- Added performance-focused tests for trajectory caching, starfield stride, planet LOD, visibility checks, and squared-distance helpers.

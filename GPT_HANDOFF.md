@@ -2,10 +2,10 @@
 
 ## Current Status
 
-- Goal: `GRC009 Implement final goal and result screen`
+- Goal: `GRC011A Performance measurement and first optimization pass`
 - Target resolution: `393x852`
 - Profile: `iphone16_large`
-- Status: Journey Progress, Earth-like final goal, result state, final score, rank, density-based crew celebration, demo orbit showcase tuning, camera/readability tuning, fixed-width pixel text rendering, Normal/Hard modes, result-screen test helper, mobile touch controls, audio foundation, and title screen are implemented; final resident art remains future work
+- Status: Journey Progress, Earth-like final goal, result state, final score, rank, density-based crew celebration, demo orbit showcase tuning, camera/readability tuning, fixed-width pixel text rendering, Normal/Hard modes, result-screen test helper, mobile touch controls, audio foundation, title screen, and first performance pass are implemented; final resident art remains future work
 
 ## Implemented
 
@@ -83,6 +83,13 @@
 - `result.py` contains pure result score, rank, crew bonus, and crew density helpers.
 - Result summary includes final score, run score, crew bonus, crew count, laps, collected supply cargo count, HP, shield, fuel, rank, and crew display density.
 - Result screen renders shimmer title text, a larger crew celebration heading, separated Hero/message placement, and staggered crew jumping using density tiers for normal, dense, and crowd counts.
+- DEBUG HUD can show timing for starfield, trajectory prediction, planet drawing, object drawing, and non-orbit DEMO AI sections.
+- Trajectory preview points are cached and recalculated every 2 frames.
+- Gameplay starfield draws fewer points than the title screen.
+- Planet rendering uses LOD so detailed surface/atmosphere/particle layers are skipped when they are not useful.
+- Orbit focus line count, result confetti, and crew UI confetti were reduced for lower draw cost.
+- Non-orbit DEMO navigation decisions are cached for short intervals.
+- Hot collision/range checks use squared-distance comparisons where exact distance is not needed.
 
 ## Product Direction
 
@@ -127,11 +134,9 @@
 
 ## Next Recommended Task
 
-`GRC009A Add result-screen test helper`
+`GRC011 Polish and release candidate prototype`
 
-Recommended scope: add DEBUG/DEMO-only `GOAL TEST`, crew presets `12`, `50`, `51`, `200`, `201`, `635`, score/resource test state, safe pre-goal placement, and normal goal-to-result transition verification.
-
-After GRC010A, the next recommended phase is `GRC011` polish and release-candidate tuning.
+Recommended scope: manual playtest tuning, UI hierarchy, route duration tuning, feedback polish, debug/release feature separation, and final prototype readiness.
 
 ## Product Specs
 
@@ -177,6 +182,7 @@ After GRC010A, the next recommended phase is `GRC011` polish and release-candida
 - GRC009 adds Journey Progress, the Earth-like goal, and result screen.
 - GRC009P adds post-goal polish, mode, navigation, presentation, asset, test helper, title screen, and post-GRC009 roadmap specs.
 - GRC010A adds the launch title state with START, Normal/Hard mode selection, DEMO entry, SOUND toggle, concise control guidance, and title-safe audio behavior.
+- GRC011A adds cached trajectory preview, planet LOD, gameplay starfield stride, reduced focus/confetti draw counts, DEMO AI throttling, squared-distance hot checks, and DEBUG timing readouts.
 - `assets/gravity_courier.pyxres` now contains the first developer-authored Hero sprite copied from root `main.pyxres`.
 - Hero is image bank 0 at `(u=0, v=0)`, `32x32`, with transparent color key `14`.
 - Five resident idle sprites are enabled below Hero at `u=0`, rows `v=32..160`, with transparent color key `14`.

@@ -26,8 +26,14 @@ class Vec2:
     def length(self) -> float:
         return hypot(self.x, self.y)
 
+    def length_squared(self) -> float:
+        return self.x * self.x + self.y * self.y
+
     def distance_to(self, other: "Vec2") -> float:
         return (self - other).length()
+
+    def distance_squared_to(self, other: "Vec2") -> float:
+        return (self - other).length_squared()
 
     def normalized(self) -> "Vec2":
         length = self.length()

@@ -215,3 +215,14 @@
 - Touch and keyboard controls should feed a shared `ControlIntent` model.
 - Tap remains reserved for future pause, cut-in advance, or special action.
 - Swipe detection should use screen-space coordinates and should not depend on camera zoom.
+
+## GRC011A
+
+- Performance work should begin with DEBUG-visible timing instead of guessing blindly.
+- Trajectory prediction may be cached for a short interval; 2-frame recalculation is acceptable for readability and responsiveness.
+- Gameplay starfield can draw fewer stars than the title screen.
+- Orbit focus concentration lines should stay restrained; 8-16 lines is the current first optimization target.
+- Planet rendering should use LOD so offscreen body details, atmosphere, and particles are skipped when they do not improve readability.
+- Result and crew confetti should keep celebration readable without drawing excessive particles.
+- DEMO navigation decisions do not need to run every frame when the rocket is not actively orbiting.
+- Collision and range checks should use squared-distance comparisons when exact display distance is not required.

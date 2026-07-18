@@ -1,6 +1,6 @@
 # Goal State
 
-- Current goal: `GRC010A Implement title screen and mode selection`
+- Current goal: `GRC011A Performance measurement and first optimization pass`
 - Status: implemented
 - Next recommended implementation goal: `GRC011 Polish and release candidate prototype`
 
@@ -75,3 +75,13 @@
 - Resident registry entries include `32x32` sprite metadata for Wind, Iron, Water, Forest, and Rock.
 - Missing `.pyxres` resources fall back to primitive portraits.
 - Final resident art remains future work.
+- GRC011A added a first performance pass before broader release-candidate polish.
+- DEBUG HUD now reports lightweight timing for starfield, trajectory prediction, planet drawing, object drawing, and DEMO AI when those sections run.
+- Trajectory preview is recalculated every 2 frames and cached between recalculations.
+- Gameplay starfield drawing uses a stride to draw fewer stars than the title screen.
+- Orbit focus concentration lines were reduced from 12-24 lines to 8-16 lines.
+- Planet rendering now skips body details when only the gravity ring is visible and uses LOD for surface/atmosphere/particle layers.
+- Deterministic planet pattern points are cached by planet/slot/radius.
+- Result and crew confetti particle counts were reduced.
+- Non-orbit DEMO navigation decisions are cached for short intervals instead of recomputed every frame.
+- Hot collision/range checks now use squared-distance comparisons where the real distance is not needed.

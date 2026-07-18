@@ -37,6 +37,12 @@
 - Collision escape orbit assist scale: `COLLISION_ESCAPE_ORBIT_ASSIST_SCALE = 0.25`
 - Preview steps: `TRAJECTORY_STEPS = 180`
 - Preview dot interval: `TRAJECTORY_DOT_INTERVAL = 4`
+- Preview recalculation interval: `TRAJECTORY_RECALC_INTERVAL_FRAMES = 2`
+- Gameplay starfield stride: `GAMEPLAY_STARFIELD_STRIDE = 2`
+- Planet LOD distances: `PLANET_LOD_FULL_DISTANCE = 620.0`, `PLANET_LOD_SURFACE_DISTANCE = 920.0`
+- Result confetti max particles: `RESULT_CONFETTI_MAX_PARTICLES = 56`
+- Crew UI confetti particles: `CREW_CONFETTI_PARTICLES = 6`
+- Demo navigation recalc interval: `DEMO_COMMAND_RECALC_FRAMES = 6`
 - Planet count: `PLANET_COUNT = 35`
 - Planet vertical spacing: `PLANET_VERTICAL_SPACING = HEIGHT * 0.34`
 - Demo target upward speed: `DEMO_TARGET_UPWARD_SPEED = -3.1`
@@ -153,6 +159,27 @@ GRC004 replaces instant planet collision crash with a minimal HP/shield model:
 GRC006 reuses the same shield/HP damage helper for floating asteroids and crossing rockets. Damage cooldown also prevents repeated immediate obstacle damage while overlapping an interplanet object.
 
 This likely makes early play more forgiving and remains a tuning target after GRC008.
+
+## Performance Pass
+
+GRC011A adds the first performance-focused pass before broader release-candidate polish:
+
+- DEBUG HUD shows lightweight timing for starfield, trajectory prediction, planet drawing, object drawing, and non-orbit DEMO AI decisions when those sections run.
+- Trajectory preview uses a 2-frame cache via `TRAJECTORY_RECALC_INTERVAL_FRAMES`.
+- Gameplay starfield draws every `GAMEPLAY_STARFIELD_STRIDE` star, while the title screen keeps the fuller starfield.
+- Orbit focus concentration lines are reduced to `ORBIT_FOCUS_MIN_LINES = 8` and `ORBIT_FOCUS_MAX_LINES = 16`.
+- Planet drawing uses LOD. Gravity rings can remain visible when the planet body is offscreen; surface/atmosphere/particle layers are skipped at longer screen distances.
+- Deterministic planet pattern points are cached by planet index, pattern slot, and rendered radius.
+- Result and crew confetti counts are reduced to keep celebration readable without heavy particle work.
+- Non-orbit DEMO navigation decisions are cached for short intervals.
+- Collision and range checks use squared-distance comparisons where exact display distance is not needed.
+
+Future tuning targets:
+
+- Use the DEBUG timing readouts during manual play before applying deeper optimization.
+- If `prediction` remains high, reduce `TRAJECTORY_STEPS` or increase `TRAJECTORY_RECALC_INTERVAL_FRAMES`.
+- If `planets` remains high, tighten `PLANET_LOD_FULL_DISTANCE` and `PLANET_LOD_SURFACE_DISTANCE`.
+- If result screen still feels heavy, reduce `RESULT_CONFETTI_MAX_PARTICLES` before reducing visible crew counts.
 
 ## Interplanet Objects
 

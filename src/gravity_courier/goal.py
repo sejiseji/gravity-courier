@@ -31,7 +31,7 @@ def create_final_goal(planets: Sequence[Planet]) -> FinalGoal:
 
 
 def reached_final_goal(position: Vec2, goal: FinalGoal) -> bool:
-    return position.distance_to(goal.position) <= goal.arrival_radius
+    return position.distance_squared_to(goal.position) <= goal.arrival_radius * goal.arrival_radius
 
 
 def journey_planet_progress(

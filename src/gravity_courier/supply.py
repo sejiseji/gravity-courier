@@ -171,8 +171,10 @@ def supply_cargo_overlaps(ship: SupplyShip, rocket_pos: Vec2, rocket_radius: flo
     if not ship.active or not ship.cargo_active or ship.cargo_collected or ship.warning_timer > 0:
         return False
     pickup_radius = rocket_radius + SUPPLY_PICKUP_RADIUS_BONUS
-    cargo_overlap = ship.cargo_pos.distance_to(rocket_pos) <= ship.cargo_radius + pickup_radius
-    ship_overlap = ship.pos.distance_to(rocket_pos) <= ship.radius + rocket_radius
+    cargo_radius = ship.cargo_radius + pickup_radius
+    ship_radius = ship.radius + rocket_radius
+    cargo_overlap = ship.cargo_pos.distance_squared_to(rocket_pos) <= cargo_radius * cargo_radius
+    ship_overlap = ship.pos.distance_squared_to(rocket_pos) <= ship_radius * ship_radius
     return cargo_overlap or ship_overlap
 
 

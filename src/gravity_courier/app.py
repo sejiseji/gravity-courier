@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import math
+from time import perf_counter
 from typing import Any
 
 from .audio import AudioManager
@@ -41,6 +42,8 @@ from .constants import (
     COLOR_STAR_DIM,
     COLOR_TRAJECTORY,
     CREW_CELEBRATION_FRAMES,
+    CREW_CONFETTI_PARTICLES,
+    DEMO_COMMAND_RECALC_FRAMES,
     DEMO_BUTTON_HEIGHT,
     DEMO_BUTTON_WIDTH,
     DEMO_BUTTON_X,
@@ -65,6 +68,7 @@ from .constants import (
     DEMO_ORBIT_MIN_SPEED,
     DEMO_ORBIT_TURNS,
     FOREST_REWARD_FUEL_RATIO,
+    GAMEPLAY_STARFIELD_STRIDE,
     HEIGHT,
     HUD_TEXT_SCALE,
     INTERPLANET_FEEDBACK_FRAMES,
@@ -101,6 +105,9 @@ from .constants import (
     OFF_COURSE_STALL_FRAMES,
     LAP_COMPLETION_RADIANS,
     ORBIT_TARGET_RADIUS_RATIO,
+    PLANET_BODY_DETAIL_MARGIN,
+    PLANET_LOD_FULL_DISTANCE,
+    PLANET_LOD_SURFACE_DISTANCE,
     PROFILE_NAME,
     ROCK_REWARD_HP_GAIN,
     ROCKET_DAMAGE_COOLDOWN_FRAMES,
@@ -131,12 +138,14 @@ from .constants import (
     TOUCH_VERTICAL_SWIPE_THRESHOLD,
     TRAJECTORY_DOT_INTERVAL,
     TRAJECTORY_PREVIEW_ALWAYS_ON,
+    TRAJECTORY_RECALC_INTERVAL_FRAMES,
     TRAJECTORY_STEPS,
     WATER_REWARD_SCORE_MULTIPLIER,
     WATER_REWARD_SCORE_USES,
     WIDTH,
     WIND_REWARD_GRAVITY_MULTIPLIER,
     WORLD_LABEL_SCALE,
+    RESULT_CONFETTI_MAX_PARTICLES,
 )
 from .course import (
     COURSE_MODE_HARD,
@@ -550,15 +559,17 @@ def nearest_demo_orbit_planet(
     skip_indices: set[int] | None = None,
 ) -> Planet | None:
     skipped = skip_indices or set()
+    search_radius_sq = (DEMO_ORBIT_SEARCH_RATIO) ** 2
     candidates = [
         planet
         for index, planet in enumerate(planets)
         if index not in skipped
-        and rocket.position.distance_to(planet.position) < planet.gravity_well_radius * DEMO_ORBIT_SEARCH_RATIO
+        and rocket.position.distance_squared_to(planet.position)
+        < (planet.gravity_well_radius * planet.gravity_well_radius) * search_radius_sq
     ]
     if not candidates:
         return None
-    return min(candidates, key=lambda planet: rocket.position.distance_to(planet.position))
+    return min(candidates, key=lambda planet: rocket.position.distance_squared_to(planet.position))
 
 
 def create_initial_planets() -> list[Planet]:
@@ -582,10 +593,11 @@ def choose_demo_command(
     lateral_input = dx * DEMO_STEER_GAIN - rocket.velocity.x * DEMO_STEER_DAMPING
     close_brake = False
     for planet in planets:
-        distance = rocket.position.distance_to(planet.position)
         avoid_radius = planet.gravity_well_radius * 0.72
-        if distance <= 0.0 or distance >= avoid_radius:
+        distance_sq = rocket.position.distance_squared_to(planet.position)
+        if distance_sq <= 0.0 or distance_sq >= avoid_radius * avoid_radius:
             continue
+        distance = math.sqrt(distance_sq)
         away = 1.0 if rocket.position.x >= planet.position.x else -1.0
         lateral_input += away * (1.0 - distance / avoid_radius) * 1.4
         if distance < planet.radius + 48.0:
@@ -721,6 +733,8 @@ class GravityCourierApp:
         self.demo_orbit_prev_angle: float | None = None
         self.demo_orbit_turns = 0.0
         self.demo_orbit_done_indices: set[int] = set()
+        self.demo_command_cache: DemoCommand | None = None
+        self.demo_command_cache_timer = 0
         self.orbit_speed_boost_timer = 0
         self.orbit_focus_strength = 0.0
         self.orbit_focus_planet_index: int | None = None
@@ -739,6 +753,10 @@ class GravityCourierApp:
         self.goal_test_flick_last_x = 0.0
         self.title_audio_started_in_update = False
         self.title_menu_index = TITLE_MENU_START
+        self.trajectory_preview_cache: list[Vec2] = []
+        self.trajectory_preview_cache_frame = -999
+        self.planet_pattern_cache: dict[tuple[int, int, int], tuple[int, int]] = {}
+        self.perf_stats: dict[str, float] = {}
         self.frame = 0
         self.restart()
 
@@ -805,6 +823,8 @@ class GravityCourierApp:
         self.demo_orbit_prev_angle = None
         self.demo_orbit_turns = 0.0
         self.demo_orbit_done_indices = set()
+        self.demo_command_cache = None
+        self.demo_command_cache_timer = 0
         self.orbit_speed_boost_timer = 0
         self.orbit_focus_strength = 0.0
         self.orbit_focus_planet_index = None
@@ -821,6 +841,9 @@ class GravityCourierApp:
         self.touch_brake_pulse_frames = 0
         self.goal_test_flick_active = False
         self.goal_test_flick_last_x = 0.0
+        self.trajectory_preview_cache = []
+        self.trajectory_preview_cache_frame = -999
+        self.perf_stats = {}
         self.camera.zoom = 1.0
         self.frame = 0
         if self.pyxel is not None:
@@ -881,6 +904,8 @@ class GravityCourierApp:
         pyxel = self.pyxel
         if pyxel is None:
             return
+        if self.show_debug:
+            self.perf_stats = {}
 
         if pyxel.btnp(pyxel.KEY_ESCAPE):
             pyxel.quit()
@@ -971,10 +996,7 @@ class GravityCourierApp:
             if orbit_planet is not None:
                 self._apply_demo_orbit(orbit_planet, orbit_index)
             else:
-                command = choose_demo_pickup_command(self.rocket, self.supply_ships)
-                if command is None:
-                    command = choose_demo_command(self.rocket, self.planets, self.demo_orbit_done_indices)
-                self._apply_demo_command(command)
+                self._apply_demo_command(self._cached_demo_command())
         else:
             self._apply_control_intent(self._control_intent(pyxel), spend_fuel=True)
 
@@ -1069,6 +1091,20 @@ class GravityCourierApp:
             return
         if (key_return is not None and pyxel.btnp(key_return)) or (key_enter is not None and pyxel.btnp(key_enter)):
             self._activate_title_menu_selection()
+
+    def _cached_demo_command(self) -> DemoCommand:
+        if self.demo_command_cache is not None and self.demo_command_cache_timer > 0:
+            self.demo_command_cache_timer -= 1
+            return self.demo_command_cache
+
+        started = perf_counter()
+        command = choose_demo_pickup_command(self.rocket, self.supply_ships)
+        if command is None:
+            command = choose_demo_command(self.rocket, self.planets, self.demo_orbit_done_indices)
+        self.demo_command_cache = command
+        self.demo_command_cache_timer = max(0, DEMO_COMMAND_RECALC_FRAMES - 1)
+        self._record_perf("demo_ai", started)
+        return command
 
     def _move_title_menu_selection(self, direction: int) -> None:
         self.title_menu_index = (self.title_menu_index + direction) % TITLE_MENU_COUNT
@@ -1355,6 +1391,23 @@ class GravityCourierApp:
 
     def _world_screen_radius(self, radius: float) -> int:
         return max(1, int(radius * self.camera.zoom))
+
+    def _record_perf(self, label: str, started: float) -> None:
+        if not self.show_debug:
+            return
+        self.perf_stats[label] = self.perf_stats.get(label, 0.0) + (perf_counter() - started) * 1000.0
+
+    def _draw_perf_stats(self) -> None:
+        pyxel = self.pyxel
+        assert pyxel is not None
+        if not self.show_debug or not self.perf_stats:
+            return
+        y = 348
+        for label in ("star", "prediction", "planets", "objects", "result", "demo_ai"):
+            if label not in self.perf_stats:
+                continue
+            pyxel.text(8, y, f"{label.upper()} {self.perf_stats[label]:.2f}MS", 13)
+            y += 10
 
     def _orbit_focus_context(self) -> tuple[int, float, int] | None:
         planet_index = self._active_orbit_planet_index()
@@ -1674,7 +1727,7 @@ class GravityCourierApp:
         if self.demo_orbit_index is None:
             return
         planet = self.planets[self.demo_orbit_index]
-        if self.rocket.position.distance_to(planet.position) >= planet.gravity_well_radius:
+        if self.rocket.position.distance_squared_to(planet.position) >= planet.gravity_well_radius * planet.gravity_well_radius:
             self.demo_orbit_index = None
             self.demo_orbit_prev_angle = None
             self.demo_orbit_turns = 0.0
@@ -1766,9 +1819,10 @@ class GravityCourierApp:
         for index, planet in enumerate(self.planets):
             if index >= len(self.assist_orbit_cooldowns) or self.assist_orbit_cooldowns[index] > 0:
                 continue
-            distance = self.rocket.position.distance_to(planet.position)
-            if planet.radius + 4.0 < distance <= planet.gravity_well_radius:
-                candidates.append((distance, index))
+            distance_sq = self.rocket.position.distance_squared_to(planet.position)
+            inner_radius = planet.radius + 4.0
+            if inner_radius * inner_radius < distance_sq <= planet.gravity_well_radius * planet.gravity_well_radius:
+                candidates.append((distance_sq, index))
         if not candidates:
             return None
         return min(candidates)[1]
@@ -2117,15 +2171,20 @@ class GravityCourierApp:
             return
 
         pyxel.cls(COLOR_BACKGROUND)
+        started = perf_counter()
         self._draw_starfield()
+        self._record_perf("star", started)
         if self.game_state == STATE_TITLE:
             self._draw_title_screen()
             return
         if self.game_state == STATE_RESULT:
+            started = perf_counter()
             self._draw_result_screen()
+            self._record_perf("result", started)
             return
         if self._trajectory_preview_enabled() and not (self.rocket.crashed or self.rocket.lost):
             self._draw_trajectory()
+        started = perf_counter()
         self._draw_planets()
         self._draw_final_goal()
         self._draw_active_orbit_track()
@@ -2133,9 +2192,12 @@ class GravityCourierApp:
         self._draw_transfer_ready_hint()
         self._draw_transfer_boost_effect()
         self._draw_course_gap_markers()
+        self._record_perf("planets", started)
+        started = perf_counter()
         self._draw_interplanet_objects()
         self._draw_meteor_swarms()
         self._draw_supply_ships()
+        self._record_perf("objects", started)
         self._draw_rocket()
         self._draw_orbit_speed_sparkles()
         self._draw_cutin_panel()
@@ -2285,7 +2347,10 @@ class GravityCourierApp:
         speed = self.rocket.velocity.length()
         self._ensure_lap_count_length()
         for index, planet in enumerate(self.planets):
-            in_well = self.rocket.position.distance_to(planet.position) <= planet.gravity_well_radius
+            in_well = (
+                self.rocket.position.distance_squared_to(planet.position)
+                <= planet.gravity_well_radius * planet.gravity_well_radius
+            )
             if update_gravity_assist(
                 self.assist_states[index],
                 index,
@@ -2403,7 +2468,7 @@ class GravityCourierApp:
 
     def _colliding_planet(self) -> Planet | None:
         for planet in self.planets:
-            if self.rocket.position.distance_to(planet.position) <= planet.radius:
+            if self.rocket.position.distance_squared_to(planet.position) <= planet.radius * planet.radius:
                 return planet
         return None
 
@@ -2472,7 +2537,8 @@ class GravityCourierApp:
     def _draw_starfield(self) -> None:
         pyxel = self.pyxel
         assert pyxel is not None
-        for index in range(STAR_COUNT):
+        stride = 1 if self.game_state == STATE_TITLE else max(1, GAMEPLAY_STARFIELD_STRIDE)
+        for index in range(0, STAR_COUNT, stride):
             x = (index * 47 + index * index * 3 + int(self.camera.position.x * 0.12)) % WIDTH
             y = (index * 83 + index * index * 5 + int(self.camera.position.y * 0.18)) % HEIGHT
             color = self._starfield_color(index)
@@ -2500,10 +2566,22 @@ class GravityCourierApp:
     def _trajectory_preview_enabled(self) -> bool:
         return TRAJECTORY_PREVIEW_ALWAYS_ON or self.show_preview
 
+    def _trajectory_preview_points(self) -> list[Vec2]:
+        interval = max(1, TRAJECTORY_RECALC_INTERVAL_FRAMES)
+        if (
+            not self.trajectory_preview_cache
+            or self.frame - self.trajectory_preview_cache_frame >= interval
+        ):
+            started = perf_counter()
+            self.trajectory_preview_cache = simulate_preview(self.rocket, self.planets, TRAJECTORY_STEPS)
+            self.trajectory_preview_cache_frame = self.frame
+            self._record_perf("prediction", started)
+        return self.trajectory_preview_cache
+
     def _draw_trajectory(self) -> None:
         pyxel = self.pyxel
         assert pyxel is not None
-        for index, point in enumerate(simulate_preview(self.rocket, self.planets, TRAJECTORY_STEPS)):
+        for index, point in enumerate(self._trajectory_preview_points()):
             if index % TRAJECTORY_DOT_INTERVAL != 0:
                 continue
             screen = self.camera.world_to_screen(point)
@@ -2517,20 +2595,23 @@ class GravityCourierApp:
         self._ensure_orbit_progress_length()
         for index, planet in enumerate(self.planets):
             screen = self.camera.world_to_screen(planet.position)
-            margin = planet.gravity_well_radius + 4
-            if screen.x < -margin or screen.x > WIDTH + margin:
-                continue
-            if screen.y < -margin or screen.y > HEIGHT + margin:
-                continue
             gravity_radius = self._world_screen_radius(planet.gravity_well_radius)
+            if not self._screen_circle_visible(screen, gravity_radius, margin=4):
+                continue
             pyxel.circb(int(screen.x), int(screen.y), gravity_radius, COLOR_GRAVITY_WELL)
             x = int(screen.x)
             y = int(screen.y)
             radius = self._world_screen_radius(planet.radius)
+            if not self._screen_circle_visible(screen, radius, margin=PLANET_BODY_DETAIL_MARGIN):
+                continue
+            detail_lod = self._planet_detail_lod(screen)
             self._draw_planet_base(x, y, radius, planet.color)
-            self._draw_planet_surface(x, y, radius, planet.planet_type, index)
-            self._draw_planet_atmosphere(x, y, radius, planet.planet_type, index)
-            self._draw_planet_particles(x, y, radius, planet.planet_type, index)
+            if detail_lod >= 1:
+                self._draw_planet_surface(x, y, radius, planet.planet_type, index)
+            if detail_lod >= 2:
+                self._draw_planet_atmosphere(x, y, radius, planet.planet_type, index)
+            if detail_lod >= 3:
+                self._draw_planet_particles(x, y, radius, planet.planet_type, index)
             spec = planet_type_spec(planet.planet_type)
             type_label_width = len(spec.debug_label) * 4 * WORLD_LABEL_SCALE
             type_label_x = int(max(4, min(WIDTH - type_label_width - 4, screen.x - type_label_width / 2)))
@@ -2547,6 +2628,24 @@ class GravityCourierApp:
                     COLOR_HUD,
                     scale=label_scale,
                 )
+
+    def _screen_circle_visible(self, screen: Vec2, radius: float, margin: float = 0.0) -> bool:
+        visibility_radius = radius + margin
+        return (
+            screen.x >= -visibility_radius
+            and screen.x <= WIDTH + visibility_radius
+            and screen.y >= -visibility_radius
+            and screen.y <= HEIGHT + visibility_radius
+        )
+
+    def _planet_detail_lod(self, screen: Vec2) -> int:
+        anchor = self.camera.anchor
+        distance_sq = screen.distance_squared_to(anchor)
+        if distance_sq > PLANET_LOD_SURFACE_DISTANCE * PLANET_LOD_SURFACE_DISTANCE:
+            return 0
+        if distance_sq > PLANET_LOD_FULL_DISTANCE * PLANET_LOD_FULL_DISTANCE:
+            return 1
+        return 3
 
     def _draw_planet_base(self, x: int, y: int, radius: int, color: int) -> None:
         pyxel = self.pyxel
@@ -2697,10 +2796,16 @@ class GravityCourierApp:
         return int(round(offset * max(0.65, radius / 20.0)))
 
     def _planet_pattern_point(self, planet_index: int, slot: int, radius: int) -> tuple[int, int]:
+        cache_key = (planet_index, slot, radius)
+        cached = self.planet_pattern_cache.get(cache_key)
+        if cached is not None:
+            return cached
         seed = planet_index * 31 + slot * 17 + 11
         angle = (seed % 36) * math.tau / 36.0
         distance = max(2, radius) * (0.35 + (seed % 5) * 0.10)
-        return int(round(math.cos(angle) * distance)), int(round(math.sin(angle) * distance))
+        point = int(round(math.cos(angle) * distance)), int(round(math.sin(angle) * distance))
+        self.planet_pattern_cache[cache_key] = point
+        return point
 
     def _draw_final_goal(self) -> None:
         pyxel = self.pyxel
@@ -2747,7 +2852,7 @@ class GravityCourierApp:
                 return self.demo_orbit_index
         self._ensure_orbit_progress_length()
         candidates = [
-            (self.rocket.position.distance_to(planet.position), index)
+            (self.rocket.position.distance_squared_to(planet.position), index)
             for index, planet in enumerate(self.planets)
             if self.orbit_progress[index].in_orbit and self._rocket_is_inside_orbit_focus_range(index)
         ]
@@ -2759,8 +2864,9 @@ class GravityCourierApp:
         if planet_index < 0 or planet_index >= len(self.planets):
             return False
         planet = self.planets[planet_index]
-        distance = self.rocket.position.distance_to(planet.position)
-        return planet.radius + 4.0 < distance <= planet.gravity_well_radius
+        distance_sq = self.rocket.position.distance_squared_to(planet.position)
+        inner_radius = planet.radius + 4.0
+        return inner_radius * inner_radius < distance_sq <= planet.gravity_well_radius * planet.gravity_well_radius
 
     def _draw_active_orbit_track(self) -> None:
         pyxel = self.pyxel
@@ -3454,6 +3560,7 @@ class GravityCourierApp:
                 13,
             )
             pyxel.text(8, 328, f"OFF DIST {self.off_course_distance:.0f} STALL {self.off_course_stall_frames}", 13)
+            self._draw_perf_stats()
 
     def _draw_off_course_helper(self) -> None:
         pyxel = self.pyxel
@@ -3790,7 +3897,7 @@ class GravityCourierApp:
         pyxel = self.pyxel
         assert pyxel is not None
         colors = (COLOR_ALERT, COLOR_HUD, COLOR_TRAJECTORY, 11, 12, 13)
-        particle_count = min(96, 36 + summary.display_crew_count * 3)
+        particle_count = min(RESULT_CONFETTI_MAX_PARTICLES, 36 + summary.display_crew_count * 2)
         top = 338
         bottom = HEIGHT - 82
         height = bottom - top
@@ -4078,7 +4185,7 @@ class GravityCourierApp:
         assert pyxel is not None
         elapsed = CREW_CELEBRATION_FRAMES - active_timer
         colors = (COLOR_ALERT, COLOR_TRAJECTORY, COLOR_HUD, COLOR_FLAME)
-        for index in range(12):
+        for index in range(CREW_CONFETTI_PARTICLES):
             seed = self._confetti_noise(index * 83 + center_x * 5 + top_y * 7)
             drift = ((elapsed * (1 + seed % 4) + (seed >> 5)) % 42) - 21
             fall = (elapsed * (2 + (seed >> 11) % 3) + (seed >> 15)) % 36

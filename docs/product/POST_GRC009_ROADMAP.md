@@ -127,6 +127,22 @@ Implemented scope:
 
 If course modes are not yet implemented, GRC009F must precede this task.
 
+## GRC011A: Performance Measurement And First Optimization Pass
+
+Scope:
+
+- DEBUG timing readouts for major frame sections.
+- Cached trajectory preview recalculation.
+- Planet draw LOD.
+- Gameplay visible-object and body-detail culling.
+- Reduced concentration-line and confetti draw counts.
+- Squared-distance hot collision/range checks.
+- Short-interval DEMO AI decision caching.
+
+Status:
+
+- Implemented as the first lightweight performance pass before broader release-candidate polish.
+
 ## GRC011: Polish And Release-Candidate Prototype
 
 Scope:
@@ -169,6 +185,9 @@ GRC010
       ↓
 GRC010A
   title screen/mode selection
+      ↓
+GRC011A
+  performance measurement/optimization
       ↓
 GRC011
   polish/release candidate

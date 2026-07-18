@@ -384,6 +384,24 @@ Implemented:
 Dependency:
 - If course modes are not implemented yet, GRC009F should precede this task.
 
+### GRC011A: Performance measurement and first optimization pass
+
+Goal:
+- Reduce obvious frame cost before broader release-candidate polish.
+
+Implemented:
+- DEBUG timing readouts.
+- Trajectory preview caching.
+- Gameplay starfield stride.
+- Planet draw LOD and deterministic pattern caching.
+- Reduced orbit focus line count.
+- Reduced result/crew confetti counts.
+- Squared-distance hot collision/range checks.
+- Short-interval DEMO AI decision caching.
+
+Status:
+- implemented
+
 ### GRC011: Polish and release candidate prototype
 
 Goal:

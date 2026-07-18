@@ -100,13 +100,13 @@ def nearest_orbit_planet(rocket: Rocket, planets: Iterable[Planet]) -> Planet | 
     candidates = [
         planet
         for planet in planets
-        if rocket.position.distance_to(planet.position)
-        < planet.gravity_well_radius * ORBIT_ASSIST_INFLUENCE_RATIO
+        if rocket.position.distance_squared_to(planet.position)
+        < (planet.gravity_well_radius * ORBIT_ASSIST_INFLUENCE_RATIO) ** 2
     ]
     if not candidates:
         return None
-    return min(candidates, key=lambda planet: rocket.position.distance_to(planet.position))
+    return min(candidates, key=lambda planet: rocket.position.distance_squared_to(planet.position))
 
 
 def check_planet_collision(position: Vec2, planets: Iterable[Planet]) -> bool:
-    return any(position.distance_to(planet.position) <= planet.radius for planet in planets)
+    return any(position.distance_squared_to(planet.position) <= planet.radius * planet.radius for planet in planets)

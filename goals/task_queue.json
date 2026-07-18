@@ -161,6 +161,13 @@
     "notes": "Implemented title state, START, Normal/Hard selection, DEMO entry, SOUND toggle, concise touch/keyboard guidance, and title-safe audio behavior."
   },
   {
+    "id": "GRC011A",
+    "title": "Performance measurement and first optimization pass",
+    "status": "done",
+    "type": "performance",
+    "notes": "Added DEBUG timing readouts, cached trajectory preview recalculation, reduced gameplay starfield draw count, reduced orbit focus line count and confetti particles, added planet draw LOD and pattern caching, throttled non-orbit DEMO AI decisions, and replaced hot collision checks with squared-distance comparisons."
+  },
+  {
     "id": "GRC011",
     "title": "Polish and release candidate prototype",
     "status": "todo",

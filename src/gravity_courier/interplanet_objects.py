@@ -87,7 +87,8 @@ def object_can_collide(obj: InterplanetObject) -> bool:
 def overlaps_circle(obj: InterplanetObject, pos: Vec2, radius: float) -> bool:
     if not object_can_collide(obj):
         return False
-    return obj.pos.distance_to(pos) <= obj.radius + radius
+    collision_radius = obj.radius + radius
+    return obj.pos.distance_squared_to(pos) <= collision_radius * collision_radius
 
 
 def collect_supply_item(obj: InterplanetObject) -> tuple[InterplanetObject, SupplyCollectionResult]:
